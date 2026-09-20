@@ -1,0 +1,9 @@
+{
+  "code": "news_digest",
+  "name": "新闻摘要员",
+  "task": "news_digest",
+  "role": "news",
+  "version": "1.0",
+  "enabled": true,
+  "description": "把快讯或公告压成中文摘要和情绪，不编造未出现的事实"
+}

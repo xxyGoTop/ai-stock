@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from agent.daily_note import daily_note
 from agent.research import analyze_stock
 from llm.config import list_models, list_profiles
+from prompts.loader import list_agents
 from quant.algorithms.registry import list_algorithms
 from quant.screening.engine import run_screening
 
@@ -45,6 +46,11 @@ def llm_models():
 @app.get("/v1/llm/profiles")
 def llm_profiles():
     return {"items": list_profiles()}
+
+
+@app.get("/v1/agents")
+def agents():
+    return {"items": list_agents()}
 
 
 @app.post("/v1/ai/analyze")

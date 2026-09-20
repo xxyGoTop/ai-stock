@@ -1,0 +1,9 @@
+{
+  "code": "screening_nl",
+  "name": "选股理解员",
+  "task": "screening_nl",
+  "role": "screener",
+  "version": "1.0",
+  "enabled": true,
+  "description": "把自然语言选股条件转成算法编码和过滤项"
+}

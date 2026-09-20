@@ -89,6 +89,7 @@
       "code": "stock_analysis_fast",
       "name": "快速",
       "task": "stock_analysis",
+      "agentCode": "stock_analyst",
       "mode": "single",
       "models": [{ "modelCode": "quant-rules", "weight": 1, "temperature": 0 }],
       "fallback": ["quant-rules"],
@@ -98,6 +99,7 @@
       "code": "stock_analysis_default",
       "name": "AIHubMix 回退",
       "task": "stock_analysis",
+      "agentCode": "stock_analyst",
       "mode": "fallback",
       "models": [
         { "modelCode": "agents-a1-free", "weight": 1, "temperature": 0.2 },
@@ -113,6 +115,7 @@
       "code": "stock_analysis_ensemble",
       "name": "多模型综合",
       "task": "stock_analysis",
+      "agentCode": "stock_analyst",
       "mode": "ensemble",
       "models": [
         { "modelCode": "quant-rules", "weight": 0.2, "temperature": 0 },

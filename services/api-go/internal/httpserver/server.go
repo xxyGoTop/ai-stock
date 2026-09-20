@@ -46,6 +46,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/screening", s.screening)
 	mux.HandleFunc("/api/v1/llm/models", s.models)
 	mux.HandleFunc("/api/v1/analysis-profiles", s.profiles)
+	mux.HandleFunc("/api/v1/agents", s.agents)
 	mux.HandleFunc("/api/v1/ai/analyze", s.analyze)
 	mux.HandleFunc("/api/v1/ai/daily-note", s.dailyNote)
 	mux.HandleFunc("/api/v1/hot", s.hot)
@@ -199,6 +200,10 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) profiles(w http.ResponseWriter, r *http.Request) {
 	s.proxyGet(w, s.py.Profiles)
+}
+
+func (s *Server) agents(w http.ResponseWriter, r *http.Request) {
+	s.proxyGet(w, s.py.Agents)
 }
 
 func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {

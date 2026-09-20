@@ -24,6 +24,13 @@ const PROFILE: Record<string, string> = {
   stock_analysis_default: 'AIHubMix 回退',
   stock_analysis_ensemble: '多模型综合',
 }
+const AGENT: Record<string, string> = {
+  stock_analyst: '个股分析员',
+  trading_planner: '交易计划员',
+  screening_nl: '选股理解员',
+  news_digest: '新闻摘要员',
+  ensemble_judge: '综合裁判',
+}
 
 export default function AnalysisPanel({ symbol }: { symbol: string }) {
   const [profiles, setProfiles] = useState<AnalysisProfile[]>([])
@@ -91,6 +98,7 @@ export default function AnalysisPanel({ symbol }: { symbol: string }) {
           <p className="muted">{data.final.summary}</p>
           <div className="muted tiny">
             {data.profileName || PROFILE[data.profileCode] || data.profileCode}
+            {data.agentCode ? ` · ${AGENT[data.agentCode] || data.agentCode}` : ''}
             {' · '}
             {(data.usedModels.length ? data.usedModels : ['quant-rules']).map((m) => MODEL[m] || m).join(' / ')}
             {data.final.risk ? ` · 风险${RISK[data.final.risk] || data.final.risk}` : ''}

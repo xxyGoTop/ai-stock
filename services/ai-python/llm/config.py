@@ -122,6 +122,7 @@ def list_profiles() -> list[dict]:
                 "name": p.get("name") or p["code"],
                 "task": p.get("task"),
                 "mode": p.get("mode"),
+                "agentCode": p.get("agentCode") or "stock_analyst",
                 "ready": bool(ready_models),
                 "readyModels": ready_models,
             }

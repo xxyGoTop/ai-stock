@@ -17,16 +17,17 @@ def run_profile(context: dict, profile_code: str | None = None) -> dict:
         vote = analyze_quant(context)
         return _pack(profile, [vote], [vote])
 
+    agent_code = profile.get("agentCode")
     mode = profile.get("mode") or "single"
     if mode == "single":
-        votes = [_invoke_or_fallback(entries, profile, context)]
+        votes = [_invoke_or_fallback(entries, profile, context, agent_code)]
     elif mode == "fallback":
-        votes = [_invoke_or_fallback(entries, profile, context)]
+        votes = [_invoke_or_fallback(entries, profile, context, agent_code)]
     else:
         votes = []
         usable = [e for e in entries if not is_exhausted(e["modelCode"])]
         with ThreadPoolExecutor(max_workers=min(3, len(usable) or 1)) as pool:
-            futs = {pool.submit(_invoke, e, context): e["modelCode"] for e in usable}
+            futs = {pool.submit(_invoke, e, context, agent_code): e["modelCode"] for e in usable}
             for fut in as_completed(futs):
                 try:
                     vote = fut.result()
@@ -47,7 +48,7 @@ def run_profile(context: dict, profile_code: str | None = None) -> dict:
     return packed
 
 
-def _invoke_or_fallback(entries: list[dict], profile: dict, context: dict) -> dict:
+def _invoke_or_fallback(entries: list[dict], profile: dict, context: dict, agent_code: str | None = None) -> dict:
     chain = profile.get("fallback") or [e["modelCode"] for e in entries]
     last_err = None
     for code in chain:
@@ -56,7 +57,7 @@ def _invoke_or_fallback(entries: list[dict], profile: dict, context: dict) -> di
             continue
         entry = next((e for e in entries if e["modelCode"] == code), {"modelCode": code, "temperature": 0.2})
         try:
-            vote = _invoke(entry, context)
+            vote = _invoke(entry, context, agent_code)
             if _usable(vote):
                 return vote
             last_err = RuntimeError(f"{code} 返回空结论")
@@ -81,11 +82,11 @@ def _usable(vote: dict | None) -> bool:
     return True
 
 
-def _invoke(entry: dict, context: dict) -> dict:
+def _invoke(entry: dict, context: dict, agent_code: str | None = None) -> dict:
     model = get_model(entry["modelCode"])
     if not model:
         raise RuntimeError("model missing")
-    return call_model(model, context, float(entry.get("temperature") or 0.2))
+    return call_model(model, context, float(entry.get("temperature") or 0.2), agent_code)
 
 
 def _pack(profile: dict, entries: list[dict], votes: list[dict]) -> dict:
@@ -108,6 +109,7 @@ def _pack(profile: dict, entries: list[dict], votes: list[dict]) -> dict:
     return {
         "profileCode": profile["code"],
         "profileName": profile.get("name") or profile["code"],
+        "agentCode": profile.get("agentCode") or "stock_analyst",
         "mode": profile.get("mode"),
         "usedModels": [v.get("modelCode") for v in votes],
         "votes": [{"modelCode": v.get("modelCode"), "direction": v.get("direction"), "score": v.get("score"), "risk": v.get("risk")} for v in votes],

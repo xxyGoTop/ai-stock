@@ -1,0 +1,9 @@
+{
+  "code": "trading_planner",
+  "name": "交易计划员",
+  "task": "trading_plan",
+  "role": "planner",
+  "version": "1.0",
+  "enabled": true,
+  "description": "根据现价和指标给出买入区间、止损、目标位和仓位，仅模拟盘参考"
+}

@@ -110,8 +110,19 @@ export interface AnalysisProfile {
   name: string
   task: string
   mode: 'single' | 'fallback' | 'ensemble'
+  agentCode?: string
   ready: boolean
   readyModels: string[]
+}
+
+export interface AgentPrompt {
+  code: string
+  name: string
+  task: string
+  role: string
+  version: string
+  enabled: boolean
+  description: string
 }
 
 export interface LlmModel {
@@ -140,6 +151,7 @@ export interface StockAnalysis {
   name: string
   profileCode: string
   profileName?: string
+  agentCode?: string
   mode: string
   usedModels: string[]
   votes: { modelCode: string; direction: string; score: number; risk: string }[]

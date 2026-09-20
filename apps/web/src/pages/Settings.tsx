@@ -1,19 +1,21 @@
 import { useEffect, useState } from 'react'
-import { listAnalysisProfiles, listLlmModels } from '@ai-stock/api-client'
-import type { AnalysisProfile, LlmModel } from '@ai-stock/types'
+import { listAgents, listAnalysisProfiles, listLlmModels } from '@ai-stock/api-client'
+import type { AgentPrompt, AnalysisProfile, LlmModel } from '@ai-stock/types'
 import { PROFILE_KEY } from '../lib/cache'
 
 export default function Settings() {
   const [profiles, setProfiles] = useState<AnalysisProfile[]>([])
   const [models, setModels] = useState<LlmModel[]>([])
+  const [agents, setAgents] = useState<AgentPrompt[]>([])
   const [current, setCurrent] = useState(localStorage.getItem(PROFILE_KEY) || 'stock_analysis_default')
   const [error, setError] = useState('')
 
   useEffect(() => {
-    Promise.all([listAnalysisProfiles(), listLlmModels()])
-      .then(([p, m]) => {
+    Promise.all([listAnalysisProfiles(), listLlmModels(), listAgents()])
+      .then(([p, m, a]) => {
         setProfiles(p)
         setModels(m)
+        setAgents(a)
       })
       .catch((err) => setError(err instanceof Error ? err.message : '加载配置失败'))
   }, [])
@@ -46,8 +48,27 @@ export default function Settings() {
           {profiles.map((p) => (
             <button key={p.code} className={current === p.code ? 'pill on' : 'pill'} onClick={() => choose(p.code)}>
               {p.name} · {p.mode}
+              {p.agentCode ? ` · ${p.agentCode}` : ''}
               {!p.ready ? '（未就绪）' : ''}
             </button>
+          ))}
+        </div>
+      </section>
+      <section className="panel" style={{ marginTop: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Agent Prompt</h3>
+        <p className="muted">提示词在 <code>services/ai-python/prompts/</code>，一个目录一个 Agent，后续加分析员直接复制目录。</p>
+        <div className="results">
+          {agents.map((a) => (
+            <div className="row" key={a.code}>
+              <div>
+                <strong>{a.name}</strong>
+                <div className="muted">
+                  {a.code} · {a.task} · {a.role} · v{a.version}
+                </div>
+                {a.description ? <div className="muted">{a.description}</div> : null}
+              </div>
+              <span className={a.enabled ? 'up' : 'muted'}>{a.enabled ? '已启用' : '停用'}</span>
+            </div>
           ))}
         </div>
       </section>

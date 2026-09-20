@@ -1,0 +1,9 @@
+{
+  "code": "stock_analyst",
+  "name": "个股分析员",
+  "task": "stock_analysis",
+  "role": "analyst",
+  "version": "1.0",
+  "enabled": true,
+  "description": "根据量化上下文输出个股方向、评分、风险和建议，禁止编造数字"
+}

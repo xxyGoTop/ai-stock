@@ -1,4 +1,5 @@
 import type {
+  AgentPrompt,
   AlgorithmMeta,
   AnalysisProfile,
   ApiResponse,
@@ -70,6 +71,10 @@ export function listLlmModels() {
 
 export function listAnalysisProfiles() {
   return get<{ items: AnalysisProfile[] }>('/analysis-profiles').then((d) => d.items)
+}
+
+export function listAgents() {
+  return get<{ items: AgentPrompt[] }>('/agents').then((d) => d.items)
 }
 
 export function analyzeStock(symbol: string, profileCode?: string) {

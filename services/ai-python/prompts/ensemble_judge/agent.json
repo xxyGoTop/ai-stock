@@ -1,0 +1,9 @@
+{
+  "code": "ensemble_judge",
+  "name": "综合裁判",
+  "task": "ensemble_judge",
+  "role": "judge",
+  "version": "1.0",
+  "enabled": true,
+  "description": "综合多个模型投票，输出一份最终方向和中文结论"
+}

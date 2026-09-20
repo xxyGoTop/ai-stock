@@ -90,6 +90,12 @@ func (c *Client) Profiles() (json.RawMessage, error) {
 	return dest, err
 }
 
+func (c *Client) Agents() (json.RawMessage, error) {
+	var dest json.RawMessage
+	err := c.get("/v1/agents", &dest)
+	return dest, err
+}
+
 func (c *Client) Analyze(payload json.RawMessage) (json.RawMessage, error) {
 	var dest json.RawMessage
 	err := c.post("/v1/ai/analyze", payload, &dest)
