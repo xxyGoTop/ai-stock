@@ -102,6 +102,18 @@ func (s *Service) ChatStream(ctx context.Context, req ChatRequest, emit EmitFunc
 	case "watchlist":
 		res, err = s.showWatchlist()
 		s.emitStaticRun(emit, plan, res, err)
+	case "tomorrow_plan":
+		if symbol != "" && symbol != "000000" {
+			res, err = s.addTomorrowPlan(symbol, msg)
+		} else if extractSymbol(msg) != "" || strings.Contains(msg, "加入") {
+			res, err = s.addTomorrowPlan(symbol, msg)
+		} else {
+			res, err = s.showTomorrowPlans()
+		}
+		s.emitStaticRun(emit, plan, res, err)
+	case "today_ops", "today_plan":
+		res, err = s.showTodayOps()
+		s.emitStaticRun(emit, plan, res, err)
 	case "watch_anomaly", "anomaly":
 		res, err = s.streamAnomalies(ctx, emit, plan)
 	default:
@@ -558,8 +570,8 @@ func (s *Service) streamAnalyze(ctx context.Context, emit EmitFunc, plan []PlanS
 	plan = markPlan(emit, plan, "actions", "running")
 	actionBlock := Block{
 		Type: "actions", Title: "接下来可以", Symbol: symbol,
-		Actions: []string{"watch", "paper", "kline"},
-		Items:   []string{"加入自选", "加入模拟交易", "打开今日K线"},
+		Actions: []string{"watch", "tomorrow_plan", "paper", "kline"},
+		Items:   []string{"加入自选", "加入明日计划", "加入模拟交易", "打开今日K线"},
 	}
 	blocks = append(blocks, actionBlock)
 	emitBlock(emit, actionBlock)

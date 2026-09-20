@@ -297,13 +297,30 @@ export interface PaperAccount {
   orders: PaperOrder[]
 }
 
+export interface WatchTradePlan {
+  buyLow?: number
+  buyHigh?: number
+  stop?: number
+  target1?: number
+  target2?: number
+  buyBatches?: number
+  position?: number
+  stance?: string
+  entryType?: string
+  note?: string
+  action?: string
+}
+
 export interface WatchItem {
   id: string
   symbol: string
   name: string
   market: Market | string
-  sortOrder: number
-  createdAt: string
+  category?: 'default' | 'tomorrow_plan' | string
+  planForDate?: string
+  plan?: WatchTradePlan
+  sortOrder?: number
+  createdAt?: string
   price?: number
   change?: number
   changePercent?: number
@@ -312,6 +329,14 @@ export interface WatchItem {
 
 export interface Watchlist {
   items: WatchItem[]
+}
+
+export interface TodayOpsScan {
+  asOf: string
+  date: string
+  count: number
+  items: WatchItem[]
+  summary: string
 }
 
 export interface ApiResponse<T> {
@@ -373,6 +398,7 @@ export interface CompanionBriefing {
   sessionCards: SessionCard[]
   watchPreview?: WatchItem[]
   anomalies?: WatchAnomaly[]
+  todayOps?: WatchItem[]
   blocks: CompanionBlock[]
   asOf: string
 }

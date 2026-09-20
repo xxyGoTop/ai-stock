@@ -6,6 +6,7 @@ import {
   getKline,
   getStock,
   getWatchAnomalies,
+  getTodayOps,
 } from '@ai-stock/api-client'
 import type {
   AgentRunState,
@@ -52,10 +53,13 @@ const QUICK = [
   { label: '选股', message: '帮我选股', action: 'screening' },
   { label: '推荐', message: '盘中推荐', action: 'intraday' },
   { label: '自选', message: '我的自选', action: 'watchlist' },
+  { label: '明日计划', message: '明日计划', action: 'tomorrow_plan' },
+  { label: '今日操作', message: '今日操作', action: 'today_ops' },
   { label: '异动', message: '看看自选异动', action: 'watch_anomaly' },
 ]
 
 const ANOMALY_SEEN_KEY = 'ai-stock.anomaly.seen'
+const TODAY_OPS_SEEN_KEY = 'ai-stock.todayops.seen'
 const LAYOUT_KEY = 'ai-stock.layout.v1'
 const WS_MIN = 280
 const WS_MAX = 720
@@ -175,6 +179,16 @@ export default function Chat() {
           /* ignore */
         }
       }
+      if (data.todayOps?.length) {
+        try {
+          const raw = sessionStorage.getItem(TODAY_OPS_SEEN_KEY)
+          const set = new Set(raw ? (JSON.parse(raw) as string[]) : [])
+          data.todayOps.forEach((it) => set.add(`${it.symbol}|${it.planForDate || 'due'}`))
+          sessionStorage.setItem(TODAY_OPS_SEEN_KEY, JSON.stringify([...set].slice(-80)))
+        } catch {
+          /* ignore */
+        }
+      }
       saveActiveConversation({
         messages: msgs,
         briefing: data,
@@ -282,6 +296,72 @@ export default function Chat() {
     }
     const t0 = window.setTimeout(() => void poll(), 12_000)
     const timer = window.setInterval(() => void poll(), 180_000)
+    return () => {
+      cancelled = true
+      window.clearTimeout(t0)
+      window.clearInterval(timer)
+    }
+  }, [loading])
+
+  // 今日操作：明日计划到期后页内推送
+  useEffect(() => {
+    let cancelled = false
+    const fpOf = (it: { symbol: string; planForDate?: string }) =>
+      `${it.symbol}|${it.planForDate || 'due'}`
+    const seen = (): Set<string> => {
+      try {
+        const raw = sessionStorage.getItem(TODAY_OPS_SEEN_KEY)
+        return new Set(raw ? (JSON.parse(raw) as string[]) : [])
+      } catch {
+        return new Set()
+      }
+    }
+    const remember = (fps: string[]) => {
+      const set = seen()
+      fps.forEach((f) => set.add(f))
+      try {
+        sessionStorage.setItem(TODAY_OPS_SEEN_KEY, JSON.stringify([...set].slice(-80)))
+      } catch {
+        /* ignore */
+      }
+    }
+    const poll = async () => {
+      if (cancelled || loading || document.hidden) return
+      try {
+        const scan = await getTodayOps()
+        if (cancelled || scan.count === 0) return
+        const known = seen()
+        const fresh = (scan.items || []).filter((it) => !known.has(fpOf(it)))
+        if (!fresh.length) return
+        remember(fresh.map(fpOf))
+        const top = fresh[0]
+        const msg: ChatMsg = {
+          id: uid(),
+          role: 'assistant',
+          proactive: true,
+          text: `【今日操作】${scan.summary}`,
+          blocks: [
+            {
+              type: 'today_ops',
+              title: '今日操作推送',
+              text: scan.summary,
+              items: fresh,
+              meta: { asOf: scan.asOf, date: scan.date, pageSize: 6, count: fresh.length },
+            },
+            {
+              type: 'suggestions',
+              title: '按计划执行',
+              items: [`分析${top.name}`, '今日操作', '明日计划', '我的自选'],
+            },
+          ],
+        }
+        setMessages((prev) => [...prev, msg])
+      } catch {
+        /* ignore */
+      }
+    }
+    const t0 = window.setTimeout(() => void poll(), 18_000)
+    const timer = window.setInterval(() => void poll(), 240_000)
     return () => {
       cancelled = true
       window.clearTimeout(t0)
@@ -508,6 +588,8 @@ export default function Chat() {
       kline: `打开 ${label || symbol || ''} K线`,
       watchlist: '我的自选',
       watch_anomaly: '看看自选异动',
+      tomorrow_plan: `把 ${label || symbol || ''} 加入明日计划`,
+      today_ops: '今日操作',
     }
     void send(map[action] || action, { symbol, action })
   }

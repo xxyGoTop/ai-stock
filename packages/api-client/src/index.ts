@@ -16,8 +16,10 @@ import type {
   HotFeed,
   NorthboundFlow,
   PaperAccount,
+  TodayOpsScan,
   WatchItem,
   Watchlist,
+  WatchTradePlan,
   ScreenResult,
   Stock,
   StockAnalysis,
@@ -107,16 +109,35 @@ export function resetPaperAccount() {
   return post<PaperAccount>('/paper/reset', {})
 }
 
-export function getWatchlist() {
-  return get<Watchlist>('/watchlist')
+export function getWatchlist(category?: string) {
+  const q = category ? `?category=${encodeURIComponent(category)}` : ''
+  return get<Watchlist>(`/watchlist${q}`)
 }
 
 export function getWatchAnomalies() {
   return get<AnomalyScan>('/watchlist/anomalies')
 }
 
-export function addWatchItem(body: { symbol: string; name?: string; market?: string }) {
+export function getTodayOps() {
+  return get<TodayOpsScan>('/watchlist/today-ops')
+}
+
+export function addWatchItem(body: {
+  symbol: string
+  name?: string
+  market?: string
+  category?: string
+  planForDate?: string
+  plan?: WatchTradePlan
+}) {
   return post<WatchItem>('/watchlist/items', body)
+}
+
+export function updateWatchItem(
+  symbol: string,
+  body: { category?: string; planForDate?: string; plan?: WatchTradePlan; name?: string },
+) {
+  return patch<WatchItem>(`/watchlist/items/${encodeURIComponent(symbol)}`, body)
 }
 
 export function removeWatchItem(symbol: string) {
@@ -241,6 +262,22 @@ async function del<T>(path: string): Promise<T> {
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+  const payload = (await res.json()) as ApiResponse<T>
+  if (payload.code !== 0) {
+    throw new Error(payload.message || 'request failed')
+  }
+  return payload.data
+}
+
+async function patch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })

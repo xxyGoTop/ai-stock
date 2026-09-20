@@ -57,6 +57,17 @@ func (s *Service) Chat(req ChatRequest) (*ChatResponse, error) {
 		return s.showWatchlist()
 	case "watch_anomaly", "anomaly":
 		return s.showAnomalies()
+	case "tomorrow_plan":
+		// 有标的则加入，否则展示列表
+		if symbol != "" && symbol != "000000" {
+			return s.addTomorrowPlan(symbol, msg)
+		}
+		if extractSymbol(msg) != "" || strings.Contains(msg, "加入") || strings.Contains(msg, "添加") {
+			return s.addTomorrowPlan(symbol, msg)
+		}
+		return s.showTomorrowPlans()
+	case "today_ops", "today_plan":
+		return s.showTodayOps()
 	default:
 		if symbol != "" && symbol != "000000" {
 			return s.analyzeStock(symbol, msg)
@@ -112,6 +123,13 @@ func detectIntent(msg, symbol string) string {
 		return "hot"
 	case strings.Contains(msg, "推荐"):
 		return "recommend"
+	case strings.Contains(msg, "今日操作") || strings.Contains(msg, "今天操作") || strings.Contains(msg, "操作计划"):
+		return "today_ops"
+	case strings.Contains(msg, "明日计划") || (strings.Contains(msg, "明天") && strings.Contains(msg, "计划")):
+		if strings.Contains(msg, "加入") || strings.Contains(msg, "添加") || extractSymbol(msg) != "" {
+			return "tomorrow_plan"
+		}
+		return "tomorrow_plan"
 	case strings.Contains(msg, "异动") || strings.Contains(msg, "自选提醒") || strings.Contains(msg, "盯盘"):
 		return "watch_anomaly"
 	case strings.Contains(msg, "我的自选") || msg == "自选股" || strings.Contains(msg, "自选列表") || strings.Contains(msg, "看看自选"):
@@ -430,11 +448,11 @@ func (s *Service) analyzeStock(symbol, msg string) (*ChatResponse, error) {
 		Type:    "actions",
 		Title:   "接下来可以",
 		Symbol:  symbol,
-		Actions: []string{"watch", "paper", "kline"},
-		Items:   []string{"加入自选", "加入模拟交易", "打开今日K线"},
+		Actions: []string{"watch", "tomorrow_plan", "paper", "kline"},
+		Items:   []string{"加入自选", "加入明日计划", "加入模拟交易", "打开今日K线"},
 	})
 
-	reply := fmt.Sprintf("已整理 %s 的快照与分析。右侧研究工作台可看 K 线，也可一键自选/模拟。", quote.Name)
+	reply := fmt.Sprintf("已整理 %s 的快照与分析。可加入自选或明日计划，右侧可看 K 线。", quote.Name)
 	return &ChatResponse{
 		Reply:  reply,
 		Intent: "analyze",
@@ -518,25 +536,5 @@ func (s *Service) klineHint(symbol, msg string) (*ChatResponse, error) {
 			Quote: quote, Actions: []string{"analyze", "watch", "paper"},
 		}},
 		Workspace: &WorkspaceHint{Type: "stock", Symbol: symbol, Name: name, Tab: "kline"},
-	}, nil
-}
-
-func (s *Service) showWatchlist() (*ChatResponse, error) {
-	items, err := s.watch.All()
-	if err != nil {
-		return &ChatResponse{Reply: "自选读取失败：" + err.Error(), Intent: "watchlist"}, nil
-	}
-	if len(items) == 0 {
-		return &ChatResponse{
-			Reply:  "自选还是空的。分析一只股票后点「加入自选」，或说「把茅台加入自选」。",
-			Intent: "watchlist",
-			Blocks: []Block{{Type: "suggestions", Items: []string{"把茅台加入自选", "分析宁德时代", "今天市场怎么样"}}},
-		}, nil
-	}
-	return &ChatResponse{
-		Reply:  fmt.Sprintf("你有 %d 只自选，点任一只要分析或看 K 线。", len(items)),
-		Intent: "watchlist",
-		Blocks: []Block{{Type: "watchlist", Title: "我的自选", Items: items}},
-		Workspace: &WorkspaceHint{Type: "market", Tab: "overview"},
 	}, nil
 }

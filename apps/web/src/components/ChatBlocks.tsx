@@ -14,6 +14,7 @@ import type {
   WatchItem,
 } from '@ai-stock/types'
 import PaginatedPicks from './PaginatedPicks'
+import WatchPlanList from './WatchPlanList'
 
 type Props = {
   blocks: CompanionBlock[]
@@ -215,7 +216,13 @@ function BlockView({
             <div className="action-row">
               {(block.actions || ['analyze', 'watch', 'paper', 'kline']).map((a) => (
                 <button key={a} type="button" className="pill" onClick={() => onAction(a, symbol, name)}>
-                  {{ analyze: '分析', watch: '自选', paper: '模拟', kline: 'K线' }[a] || a}
+                  {{
+                    analyze: '分析',
+                    watch: '自选',
+                    tomorrow_plan: '明日计划',
+                    paper: '模拟',
+                    kline: 'K线',
+                  }[a] || a}
                 </button>
               ))}
               <Link className="pill" to={`/stock/${symbol}`}>
@@ -260,28 +267,39 @@ function BlockView({
     }
     case 'watchlist': {
       const items = (block.items as WatchItem[]) || []
+      const pageSize = Number(block.meta?.pageSize) || 8
       return (
         <div className="cblock">
           <h4>{block.title || '自选'}</h4>
-          <div className="pick-list">
-            {items.map((it) => (
-              <div className="pick-row" key={it.symbol}>
-                <button type="button" className="linkish" onClick={() => onPick(it.symbol, it.name)}>
-                  <strong>
-                    {it.name} <span className="muted">{it.symbol}</span>
-                  </strong>
-                </button>
-                <div className="action-row tight">
-                  <button type="button" className="pill" onClick={() => onAction('analyze', it.symbol, it.name)}>
-                    分析
-                  </button>
-                  <button type="button" className="pill" onClick={() => onAction('kline', it.symbol, it.name)}>
-                    K线
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+          <WatchPlanList items={items} pageSize={pageSize} mode="watchlist" onPick={onPick} onAction={onAction} />
+        </div>
+      )
+    }
+    case 'tomorrow_plan': {
+      const items = (block.items as WatchItem[]) || []
+      const pageSize = Number(block.meta?.pageSize) || 6
+      return (
+        <div className="cblock">
+          <h4>{block.title || '明日计划'}</h4>
+          {block.text && <p className="muted">{block.text}</p>}
+          <WatchPlanList
+            items={items}
+            pageSize={pageSize}
+            mode="tomorrow_plan"
+            onPick={onPick}
+            onAction={onAction}
+          />
+        </div>
+      )
+    }
+    case 'today_ops': {
+      const items = (block.items as WatchItem[]) || []
+      const pageSize = Number(block.meta?.pageSize) || 6
+      return (
+        <div className="cblock today-ops-block">
+          <h4>{block.title || '今日操作'}</h4>
+          {block.text && <p>{block.text}</p>}
+          <WatchPlanList items={items} pageSize={pageSize} mode="today_ops" onPick={onPick} onAction={onAction} />
         </div>
       )
     }
@@ -336,6 +354,9 @@ function BlockView({
               </button>
               <button type="button" className="pill" onClick={() => onAction('watch', block.symbol)}>
                 加入自选
+              </button>
+              <button type="button" className="pill" onClick={() => onAction('tomorrow_plan', block.symbol)}>
+                加入明日计划
               </button>
               <button type="button" className="pill" onClick={() => onAction('paper', block.symbol)}>
                 模拟交易

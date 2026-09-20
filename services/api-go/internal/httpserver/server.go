@@ -76,6 +76,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/paper/positions", s.paperPositions)
 	mux.HandleFunc("/api/v1/paper/reset", s.paperReset)
 	mux.HandleFunc("/api/v1/watchlist/anomalies", s.watchAnomalies)
+	mux.HandleFunc("/api/v1/watchlist/today-ops", s.watchTodayOps)
 	mux.HandleFunc("/api/v1/watchlist/items/", s.watchItem)
 	mux.HandleFunc("/api/v1/watchlist/items", s.watchItems)
 	mux.HandleFunc("/api/v1/watchlist", s.watchlist)
@@ -366,7 +367,14 @@ func (s *Server) watchlist(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusMethodNotAllowed, "GET only")
 		return
 	}
-	items, err := s.watch.All()
+	category := strings.TrimSpace(r.URL.Query().Get("category"))
+	var items []watchlist.Item
+	var err error
+	if category != "" {
+		items, err = s.watch.ByCategory(category)
+	} else {
+		items, err = s.watch.All()
+	}
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, err.Error())
 		return
@@ -397,6 +405,19 @@ func (s *Server) watchAnomalies(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, scan)
 }
 
+func (s *Server) watchTodayOps(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		response.Error(w, http.StatusMethodNotAllowed, "GET only")
+		return
+	}
+	scan, err := s.comp.ScanTodayOps()
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(w, scan)
+}
+
 func (s *Server) watchItems(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodDelete {
 		s.removeWatch(w, r.URL.Query().Get("symbol"))
@@ -407,9 +428,12 @@ func (s *Server) watchItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Symbol string `json:"symbol"`
-		Name   string `json:"name"`
-		Market string `json:"market"`
+		Symbol      string              `json:"symbol"`
+		Name        string              `json:"name"`
+		Market      string              `json:"market"`
+		Category    string              `json:"category"`
+		PlanForDate string              `json:"planForDate"`
+		Plan        *watchlist.TradePlan `json:"plan"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		response.Error(w, http.StatusBadRequest, "invalid json")
@@ -422,7 +446,10 @@ func (s *Server) watchItems(w http.ResponseWriter, r *http.Request) {
 		}
 		body.Market = string(q.Market)
 	}
-	item, err := s.watch.Add(body.Symbol, body.Name, body.Market)
+	item, err := s.watch.Upsert(watchlist.UpsertInput{
+		Symbol: body.Symbol, Name: body.Name, Market: body.Market,
+		Category: body.Category, PlanForDate: body.PlanForDate, Plan: body.Plan,
+	})
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -431,11 +458,39 @@ func (s *Server) watchItems(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) watchItem(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		response.Error(w, http.StatusMethodNotAllowed, "DELETE only")
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/watchlist/items/")
+	id = strings.TrimSpace(id)
+	if id == "" {
+		response.Error(w, http.StatusBadRequest, "id required")
 		return
 	}
-	s.removeWatch(w, strings.TrimPrefix(r.URL.Path, "/api/v1/watchlist/items/"))
+	switch r.Method {
+	case http.MethodDelete:
+		s.removeWatch(w, id)
+	case http.MethodPatch, http.MethodPut:
+		var body struct {
+			Name        string               `json:"name"`
+			Market      string               `json:"market"`
+			Category    string               `json:"category"`
+			PlanForDate string               `json:"planForDate"`
+			Plan        *watchlist.TradePlan `json:"plan"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			response.Error(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		item, err := s.watch.Update(id, watchlist.UpsertInput{
+			Name: body.Name, Market: body.Market, Category: body.Category,
+			PlanForDate: body.PlanForDate, Plan: body.Plan,
+		})
+		if err != nil {
+			response.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		response.OK(w, item)
+	default:
+		response.Error(w, http.StatusMethodNotAllowed, "DELETE or PATCH")
+	}
 }
 
 func (s *Server) removeWatch(w http.ResponseWriter, id string) {

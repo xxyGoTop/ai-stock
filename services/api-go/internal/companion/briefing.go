@@ -62,6 +62,7 @@ type Briefing struct {
 	SessionCards  []SessionCard            `json:"sessionCards"`
 	WatchPreview  []watchlist.Item         `json:"watchPreview,omitempty"`
 	Anomalies     []Anomaly                `json:"anomalies,omitempty"`
+	TodayOps      []watchlist.Item         `json:"todayOps,omitempty"`
 	Blocks        []Block                  `json:"blocks"`
 	AsOf          string                   `json:"asOf"`
 }
@@ -191,8 +192,16 @@ func (s *Service) BuildBriefing() (*Briefing, error) {
 		}
 	}
 
+	var todayOps []watchlist.Item
+	if ops, err := s.ScanTodayOps(); err == nil && ops != nil && ops.Count > 0 {
+		todayOps = ops.Items
+		summary = summary + " " + ops.Summary
+	}
+
 	greeting := fmt.Sprintf("我是你的投研伙伴。当前处于%s时段，先帮你扫一眼今天的市场。", phaseLabel(phase))
-	if len(anomalies) > 0 {
+	if len(todayOps) > 0 {
+		greeting = fmt.Sprintf("我是你的投研伙伴。当前处于%s时段。今日有 %d 只「明日计划」进入操作日，要先看操作节奏吗？", phaseLabel(phase), len(todayOps))
+	} else if len(anomalies) > 0 {
 		greeting = fmt.Sprintf("我是你的投研伙伴。当前处于%s时段。你的自选股中有 %d 只出现较明显异动，要不要先从这里开始？", phaseLabel(phase), len(anomalies))
 	}
 
@@ -209,6 +218,7 @@ func (s *Service) BuildBriefing() (*Briefing, error) {
 		SessionCards:  cards,
 		WatchPreview:  watch,
 		Anomalies:     anomalies,
+		TodayOps:      todayOps,
 		AsOf:          time.Now().In(time.FixedZone("CST", 8*3600)).Format("2006-01-02 15:04"),
 	}
 	b.Blocks = briefingBlocks(b)
@@ -324,6 +334,15 @@ func briefingBlocks(b *Briefing) []Block {
 	if len(b.News) > 0 {
 		blocks = append(blocks, Block{Type: "news", Title: "重要快讯", Items: b.News})
 	}
+	if len(b.TodayOps) > 0 {
+		blocks = append(blocks, Block{
+			Type:  "today_ops",
+			Title: "今日操作",
+			Text:  fmt.Sprintf("今日有 %d 只自选进入操作日。", len(b.TodayOps)),
+			Items: b.TodayOps,
+			Meta:  map[string]interface{}{"asOf": b.AsOf, "pageSize": 6, "count": len(b.TodayOps)},
+		})
+	}
 	if len(b.Anomalies) > 0 {
 		blocks = append(blocks, Block{
 			Type:  "anomaly",
@@ -333,11 +352,18 @@ func briefingBlocks(b *Briefing) []Block {
 			Meta:  map[string]interface{}{"asOf": b.AsOf, "count": len(b.Anomalies)},
 		})
 	} else if len(b.WatchPreview) > 0 {
-		blocks = append(blocks, Block{Type: "watchlist", Title: "自选速览", Items: b.WatchPreview})
+		blocks = append(blocks, Block{
+			Type:  "watchlist",
+			Title: "自选速览",
+			Items: b.WatchPreview,
+			Meta:  map[string]interface{}{"pageSize": 8},
+		})
 	}
-	suggest := []string{"今天行情", "今日热点", "帮我选股", "盘中推荐", "看看自选异动", "分析贵州茅台"}
-	if len(b.Anomalies) > 0 {
-		suggest = []string{"看看自选异动", "分析" + b.Anomalies[0].Name, "今天行情", "帮我选股", "我的自选"}
+	suggest := []string{"今天行情", "今日热点", "帮我选股", "今日操作", "明日计划", "看看自选异动"}
+	if len(b.TodayOps) > 0 {
+		suggest = []string{"今日操作", "分析" + b.TodayOps[0].Name, "明日计划", "我的自选", "今天行情"}
+	} else if len(b.Anomalies) > 0 {
+		suggest = []string{"看看自选异动", "分析" + b.Anomalies[0].Name, "今日操作", "帮我选股", "我的自选"}
 	}
 	blocks = append(blocks, Block{
 		Type:  "suggestions",
