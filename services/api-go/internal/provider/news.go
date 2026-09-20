@@ -128,10 +128,10 @@ func (b *Bundle) HotNews(limit int) ([]NewsItem, error) {
 }
 
 func (b *Bundle) HotBoards(limit int) ([]HotBoard, error) {
-	if limit <= 0 || limit > 30 {
-		limit = 12
+	if limit <= 0 || limit > 50 {
+		limit = 30
 	}
-	query := "pn=1&pz=40&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m%3A90%2Bt%3A2&fields=f12,f14,f3,f109,f128,f136,f140"
+	query := "pn=1&pz=60&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m%3A90%2Bt%3A2&fields=f12,f14,f3,f109,f128,f136,f140"
 	var payload map[string]interface{}
 	var last error
 	for _, host := range emHosts {
@@ -182,7 +182,7 @@ func (b *Bundle) HotFeed(limit int) (*HotFeed, error) {
 	}()
 	go func() {
 		defer wg.Done()
-		boards, boardErr = b.HotBoards(12)
+		boards, boardErr = b.HotBoards(40)
 	}()
 	wg.Wait()
 	if newsErr != nil && boardErr != nil {

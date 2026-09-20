@@ -1,21 +1,42 @@
-import { useEffect, useState } from 'react'
-import { listAgents, listAnalysisProfiles, listLlmModels } from '@ai-stock/api-client'
-import type { AgentPrompt, AnalysisProfile, LlmModel } from '@ai-stock/types'
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { listAgents, listAnalysisProfiles, listDailyPicks, listLlmModels } from '@ai-stock/api-client'
+import type { AgentPrompt, AnalysisProfile, DailyPickRecord, LlmModel } from '@ai-stock/types'
+import PaginatedPicks from '../components/PaginatedPicks'
 import { PROFILE_KEY } from '../lib/cache'
+
+const KIND_LABEL: Record<string, string> = {
+  recommend: '今日推荐',
+  screening: '今日选股',
+  preopen: '盘前推荐',
+  intraday: '盘中推荐',
+  close_auction: '尾盘推荐',
+  review: '收盘复盘',
+}
 
 export default function Settings() {
   const [profiles, setProfiles] = useState<AnalysisProfile[]>([])
   const [models, setModels] = useState<LlmModel[]>([])
   const [agents, setAgents] = useState<AgentPrompt[]>([])
+  const [records, setRecords] = useState<DailyPickRecord[]>([])
+  const [activeKey, setActiveKey] = useState('')
   const [current, setCurrent] = useState(localStorage.getItem(PROFILE_KEY) || 'stock_analysis_default')
   const [error, setError] = useState('')
 
   useEffect(() => {
-    Promise.all([listAnalysisProfiles(), listLlmModels(), listAgents()])
-      .then(([p, m, a]) => {
+    Promise.all([listAnalysisProfiles(), listLlmModels(), listAgents(), listDailyPicks()])
+      .then(([p, m, a, picks]) => {
         setProfiles(p)
         setModels(m)
         setAgents(a)
+        setRecords(picks)
+        if (picks.length) {
+          const prefer =
+            picks.find((r) => r.kind === 'recommend') ||
+            picks.find((r) => r.kind === 'screening') ||
+            picks[0]
+          setActiveKey(`${prefer.date}:${prefer.kind}`)
+        }
       })
       .catch((err) => setError(err instanceof Error ? err.message : '加载配置失败'))
   }, [])
@@ -25,23 +46,78 @@ export default function Settings() {
     localStorage.setItem(PROFILE_KEY, code)
   }
 
+  const active = useMemo(
+    () => records.find((r) => `${r.date}:${r.kind}` === activeKey) || null,
+    [records, activeKey],
+  )
+
   return (
     <main>
       <section className="panel">
+        <div className="header-line">
+          <h2 className="section-title">设置</h2>
+          <Link className="ghost-btn" to="/">
+            返回对话
+          </Link>
+        </div>
+      </section>
+
+      <section className="panel" style={{ marginTop: 16 }}>
+        <h2 className="section-title">每日推荐 / 选股记录</h2>
+        <p className="muted">
+          对话里生成「推荐」或「选股」时会按自然日落盘；同一天同类记录会覆盖。数据文件在服务端{' '}
+          <code>services/api-go/data/daily_picks.json</code>。
+        </p>
+        {records.length === 0 ? (
+          <p className="muted">还没有记录。回到对话点「推荐」或「选股」生成一次即可。</p>
+        ) : (
+          <>
+            <div className="algo-pills">
+              {records.map((r) => {
+                const key = `${r.date}:${r.kind}`
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    className={activeKey === key ? 'pill on' : 'pill'}
+                    onClick={() => setActiveKey(key)}
+                  >
+                    {r.date} · {KIND_LABEL[r.kind] || r.title} · {r.count}只
+                  </button>
+                )
+              })}
+            </div>
+            {active && (
+              <div style={{ marginTop: 12 }}>
+                <div className="header-line">
+                  <div>
+                    <strong>
+                      {active.title} · {active.date}
+                    </strong>
+                    <div className="muted">
+                      {active.asOf}
+                      {active.summary ? ` · ${active.summary}` : ''}
+                    </div>
+                  </div>
+                </div>
+                <PaginatedPicks
+                  items={active.picks}
+                  pageSize={10}
+                  onPick={() => undefined}
+                  onAction={() => undefined}
+                  showDetailLink
+                />
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      <section className="panel" style={{ marginTop: 16 }}>
         <h2 className="section-title">分析设置</h2>
         <p className="muted">
           密钥只读环境变量，不入库。AIHubMix 用 <code>LLM_AIHUBMIX_KEY</code>（也认 <code>AIHUBMIX_API_KEY</code>），
           免费模型额度用完会自动切下一个：agents-a1-free → intern-s2-free → DeepSeek / Qwen → 量化规则。
-        </p>
-        <p className="muted tight">
-          模型页：
-          <a href="https://aihubmix.com/model/agents-a1-free" target="_blank" rel="noreferrer">
-            Agents A1
-          </a>
-          {' · '}
-          <a href="https://aihubmix.com/model/intern-s2-free" target="_blank" rel="noreferrer">
-            Intern S2
-          </a>
         </p>
         {error && <p className="warn">{error}</p>}
         <div className="algo-pills">

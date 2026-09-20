@@ -1,36 +1,28 @@
-import { Link, Navigate, NavLink, Route, Routes } from 'react-router-dom'
-import Home from './pages/Home'
-import Hot from './pages/Hot'
+import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import TopTools from './components/TopTools'
+import Chat from './pages/Chat'
 import Paper from './pages/Paper'
-import Screening from './pages/Screening'
 import Settings from './pages/Settings'
 import StockDetail from './pages/StockDetail'
 
 export default function App() {
   return (
-    <div className="app">
-      <header className="topbar">
+    <div className="app companion-app">
+      <header className="topbar compact-topbar">
         <Link to="/" className="brand">
-          AI Stock
+          AI 投研
         </Link>
-        <nav className="nav">
-          <NavLink to="/" end>
-            行情
-          </NavLink>
-          <NavLink to="/screening">选股</NavLink>
-          <NavLink to="/hot">热点</NavLink>
-          <NavLink to="/paper">模拟</NavLink>
-          <NavLink to="/settings">设置</NavLink>
-        </nav>
-        <span className="tag">模拟盘 · 非实盘</span>
+        <span className="tag grow">对话优先 · 模拟盘</span>
+        <TopTools />
       </header>
       <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/screening" element={<Screening />} />
-        <Route path="/hot" element={<Hot />} />
+        <Route path="/" element={<Chat />} />
         <Route path="/paper" element={<Paper />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/stock/:symbol" element={<StockDetail />} />
+        <Route path="/market" element={<Navigate to="/" replace />} />
+        <Route path="/screening" element={<Navigate to="/" replace />} />
+        <Route path="/hot" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xxyGoTop/ai-stock/services/api-go/internal/companion"
+	"github.com/xxyGoTop/ai-stock/services/api-go/internal/dailypicks"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/indicator"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/paper"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/provider"
@@ -22,6 +25,8 @@ type Server struct {
 	py     *python.Client
 	paper  *paper.Store
 	watch  *watchlist.Store
+	picks  *dailypicks.Store
+	comp   *companion.Service
 	origin string
 }
 
@@ -30,7 +35,19 @@ func New(timeout time.Duration) *Server {
 	if origin == "" {
 		origin = "http://localhost:5273"
 	}
-	return &Server{bundle: provider.NewProviders(timeout), py: python.New(), paper: paper.New(), watch: watchlist.New(), origin: origin}
+	bundle := provider.NewProviders(timeout)
+	py := python.New()
+	watch := watchlist.New()
+	picks := dailypicks.New()
+	return &Server{
+		bundle: bundle,
+		py:     py,
+		paper:  paper.New(),
+		watch:  watch,
+		picks:  picks,
+		comp:   companion.New(bundle, py, watch, picks),
+		origin: origin,
+	}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -49,11 +66,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/agents", s.agents)
 	mux.HandleFunc("/api/v1/ai/analyze", s.analyze)
 	mux.HandleFunc("/api/v1/ai/daily-note", s.dailyNote)
-	mux.HandleFunc("/api/v1/hot", s.hot)
+	mux.HandleFunc("/api/v1/ai/companion/briefing", s.companionBriefing)
+	mux.HandleFunc("/api/v1/ai/companion/chat", s.companionChat)
+	mux.HandleFunc("/api/v1/ai/companion/chat/stream", s.companionChatStream)
+	mux.HandleFunc("/api/v1/market/northbound", s.northbound)
+	mux.HandleFunc("/api/v1/daily-picks", s.dailyPicks)
 	mux.HandleFunc("/api/v1/paper/account", s.paperAccount)
 	mux.HandleFunc("/api/v1/paper/orders", s.paperOrders)
 	mux.HandleFunc("/api/v1/paper/positions", s.paperPositions)
 	mux.HandleFunc("/api/v1/paper/reset", s.paperReset)
+	mux.HandleFunc("/api/v1/watchlist/anomalies", s.watchAnomalies)
 	mux.HandleFunc("/api/v1/watchlist/items/", s.watchItem)
 	mux.HandleFunc("/api/v1/watchlist/items", s.watchItems)
 	mux.HandleFunc("/api/v1/watchlist", s.watchlist)
@@ -362,6 +384,19 @@ func (s *Server) watchlist(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, map[string]interface{}{"items": items})
 }
 
+func (s *Server) watchAnomalies(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		response.Error(w, http.StatusMethodNotAllowed, "GET only")
+		return
+	}
+	scan, err := s.comp.ScanWatchAnomalies()
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(w, scan)
+}
+
 func (s *Server) watchItems(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodDelete {
 		s.removeWatch(w, r.URL.Query().Get("symbol"))
@@ -452,6 +487,110 @@ func (s *Server) proxyGet(w http.ResponseWriter, fn func() (json.RawMessage, err
 		return
 	}
 	response.OK(w, dest)
+}
+
+func (s *Server) companionBriefing(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		response.Error(w, http.StatusMethodNotAllowed, "GET or POST")
+		return
+	}
+	briefing, err := s.comp.BuildBriefing()
+	if err != nil {
+		response.Error(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	response.OK(w, briefing)
+}
+
+func (s *Server) companionChat(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		response.Error(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	var req companion.ChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	res, err := s.comp.Chat(req)
+	if err != nil {
+		response.Error(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	response.OK(w, res)
+}
+
+func (s *Server) companionChatStream(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		response.Error(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	var req companion.ChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		response.Error(w, http.StatusInternalServerError, "stream unsupported")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache, no-transform")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	ctx := r.Context()
+	writeEvent := func(event string, data interface{}) {
+		raw, err := json.Marshal(data)
+		if err != nil {
+			raw = []byte(`{"message":"marshal error"}`)
+		}
+		_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, raw)
+		flusher.Flush()
+	}
+
+	_ = s.comp.ChatStream(ctx, req, writeEvent)
+}
+
+func (s *Server) northbound(w http.ResponseWriter, r *http.Request) {
+	flow, err := s.bundle.NorthboundFlow()
+	if err != nil {
+		response.Error(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	response.OK(w, flow)
+}
+
+func (s *Server) dailyPicks(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		response.Error(w, http.StatusMethodNotAllowed, "GET only")
+		return
+	}
+	date := strings.TrimSpace(r.URL.Query().Get("date"))
+	kind := strings.TrimSpace(r.URL.Query().Get("kind"))
+	if date != "" || kind != "" {
+		if kind == "" {
+			kind = "recommend"
+		}
+		rec, err := s.picks.Get(date, kind)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		response.OK(w, rec)
+		return
+	}
+	list, err := s.picks.List()
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(w, map[string]interface{}{"items": list})
 }
 
 func (s *Server) loadKline(r *http.Request) (*provider.KlineResult, error) {

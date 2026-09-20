@@ -319,3 +319,142 @@ export interface ApiResponse<T> {
   message: string
   data: T
 }
+
+export type CompanionPhase = 'preopen' | 'intraday' | 'close_auction' | 'review'
+
+export interface NorthboundFlow {
+  netInflow: number
+  shNetInflow: number
+  szNetInflow: number
+  asOf: string
+  status: string
+  text: string
+  source: string
+}
+
+export interface RecommendPick {
+  symbol: string
+  name: string
+  changePercent: number
+  reason: string
+  board?: string
+}
+
+export interface SessionCard {
+  phase: CompanionPhase
+  title: string
+  active: boolean
+  summary: string
+  picks: RecommendPick[]
+}
+
+export interface CompanionBlock {
+  type: string
+  title?: string
+  text?: string
+  items?: unknown
+  quote?: Quote
+  data?: unknown
+  symbol?: string
+  actions?: string[]
+  meta?: Record<string, unknown>
+}
+
+export interface CompanionBriefing {
+  phase: CompanionPhase
+  phaseLabel: string
+  greeting: string
+  marketSummary: string
+  indices: Quote[]
+  northbound?: NorthboundFlow
+  boards: HotBoard[]
+  topics: HotTopic[]
+  news: HotNews[]
+  sessionCards: SessionCard[]
+  watchPreview?: WatchItem[]
+  anomalies?: WatchAnomaly[]
+  blocks: CompanionBlock[]
+  asOf: string
+}
+
+export interface WatchAnomaly {
+  symbol: string
+  name: string
+  price: number
+  changePercent: number
+  volumeRatio?: number
+  turnover?: number
+  industry?: string
+  level: 'mild' | 'notable' | 'strong' | string
+  reasons: string[]
+  summary: string
+  fingerprint: string
+}
+
+export interface AnomalyScan {
+  asOf: string
+  count: number
+  items: WatchAnomaly[]
+  summary: string
+  hasWatch: boolean
+}
+
+export interface CompanionWorkspace {
+  type: 'market' | 'stock' | 'empty' | string
+  symbol?: string
+  name?: string
+  tab?: 'overview' | 'kline' | 'analysis' | 'paper' | string
+}
+
+export interface CompanionChatResponse {
+  reply: string
+  intent: string
+  blocks: CompanionBlock[]
+  workspace?: CompanionWorkspace
+}
+
+export type AgentStreamEvent =
+  | { event: 'message.start'; data: { runId?: string; intent?: string; mode?: string } }
+  | { event: 'research.plan'; data: { steps: { id: string; title: string; status: string }[] } }
+  | {
+      event: 'tool.start' | 'tool.result'
+      data: { tool: string; title?: string; ok?: boolean; summary?: string; error?: string }
+    }
+  | { event: 'block'; data: CompanionBlock }
+  | { event: 'message.delta'; data: { content: string } }
+  | {
+      event: 'message.end'
+      data: {
+        ok?: boolean
+        runId?: string
+        reply?: string
+        intent?: string
+        blocks?: CompanionBlock[]
+        workspace?: CompanionWorkspace
+      }
+    }
+  | { event: 'error'; data: { message?: string } }
+
+export type AgentRunState = 'idle' | 'thinking' | 'planning' | 'tooling' | 'streaming' | 'done' | 'error' | 'cancelled'
+
+export interface DailyPickItem {
+  symbol: string
+  name: string
+  changePercent: number
+  reason?: string
+  board?: string
+  score?: number
+  primaryName?: string
+  industry?: string
+}
+
+export interface DailyPickRecord {
+  date: string
+  kind: string
+  title: string
+  asOf: string
+  count: number
+  picks: DailyPickItem[]
+  summary?: string
+}
+

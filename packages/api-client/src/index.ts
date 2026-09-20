@@ -2,13 +2,19 @@ import type {
   AgentPrompt,
   AlgorithmMeta,
   AnalysisProfile,
+  AnomalyScan,
   ApiResponse,
+  CompanionBriefing,
+  CompanionChatResponse,
+  AgentStreamEvent,
+  DailyPickRecord,
   IndicatorResult,
   KlineBar,
   LlmModel,
   Quote,
   DailyNote,
   HotFeed,
+  NorthboundFlow,
   PaperAccount,
   WatchItem,
   Watchlist,
@@ -105,12 +111,119 @@ export function getWatchlist() {
   return get<Watchlist>('/watchlist')
 }
 
+export function getWatchAnomalies() {
+  return get<AnomalyScan>('/watchlist/anomalies')
+}
+
 export function addWatchItem(body: { symbol: string; name?: string; market?: string }) {
   return post<WatchItem>('/watchlist/items', body)
 }
 
 export function removeWatchItem(symbol: string) {
   return del<{ removed: string }>(`/watchlist/items/${encodeURIComponent(symbol)}`)
+}
+
+export function getCompanionBriefing() {
+  return get<CompanionBriefing>('/ai/companion/briefing')
+}
+
+export function companionChat(body: { message?: string; symbol?: string; action?: string }) {
+  return post<CompanionChatResponse>('/ai/companion/chat', body)
+}
+
+/** Agent Run SSE：边跑边推 research.plan / tool.* / block / message.delta */
+export async function companionChatStream(
+  body: { message?: string; symbol?: string; action?: string },
+  handlers: {
+    onEvent: (ev: AgentStreamEvent) => void
+    signal?: AbortSignal
+  },
+): Promise<CompanionChatResponse> {
+  const res = await fetch(`${API_BASE}/ai/companion/chat/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+    },
+    body: JSON.stringify(body),
+    signal: handlers.signal,
+  })
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+  if (!res.body) {
+    throw new Error('stream body empty')
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+  let final: CompanionChatResponse = { reply: '', intent: '', blocks: [] }
+
+  const dispatch = (event: string, raw: string) => {
+    let data: unknown = {}
+    try {
+      data = raw ? JSON.parse(raw) : {}
+    } catch {
+      data = { message: raw }
+    }
+    const ev = { event, data } as AgentStreamEvent
+    handlers.onEvent(ev)
+    if (event === 'message.end') {
+      const end = data as CompanionChatResponse & { ok?: boolean; reply?: string }
+      final = {
+        reply: end.reply || final.reply,
+        intent: end.intent || final.intent,
+        blocks: end.blocks || final.blocks,
+        workspace: end.workspace || final.workspace,
+      }
+    }
+    if (event === 'message.delta') {
+      const d = data as { content?: string }
+      if (d.content) final.reply = (final.reply || '') + d.content
+    }
+    if (event === 'block') {
+      final.blocks = [...(final.blocks || []), data as CompanionChatResponse['blocks'][number]]
+    }
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    // SSE 事件以空行分隔
+    let idx: number
+    while ((idx = buffer.indexOf('\n\n')) >= 0) {
+      const chunk = buffer.slice(0, idx)
+      buffer = buffer.slice(idx + 2)
+      const lines = chunk.split(/\r?\n/)
+      let event = 'message'
+      const dataLines: string[] = []
+      for (const line of lines) {
+        if (line.startsWith('event:')) event = line.slice(6).trim()
+        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim())
+      }
+      dispatch(event, dataLines.join('\n'))
+    }
+  }
+
+  return final
+}
+
+export function getNorthbound() {
+  return get<NorthboundFlow>('/market/northbound')
+}
+
+export function listDailyPicks() {
+  return get<{ items: DailyPickRecord[] }>('/daily-picks').then((d) => d.items || [])
+}
+
+export function getDailyPick(date?: string, kind = 'recommend') {
+  const q = new URLSearchParams()
+  if (date) q.set('date', date)
+  if (kind) q.set('kind', kind)
+  const qs = q.toString()
+  return get<DailyPickRecord | null>(`/daily-picks${qs ? `?${qs}` : ''}`)
 }
 
 async function del<T>(path: string): Promise<T> {

@@ -14,7 +14,20 @@ export default defineConfig({
   server: {
     port: 5273,
     proxy: {
-      '/api': 'http://127.0.0.1:18080',
+      '/api': {
+        target: 'http://127.0.0.1:18080',
+        changeOrigin: true,
+        // SSE / Agent Run 流式：关闭代理缓冲
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes) => {
+            const ct = proxyRes.headers['content-type'] || ''
+            if (String(ct).includes('text/event-stream')) {
+              proxyRes.headers['cache-control'] = 'no-cache, no-transform'
+              proxyRes.headers['x-accel-buffering'] = 'no'
+            }
+          })
+        },
+      },
     },
   },
 })

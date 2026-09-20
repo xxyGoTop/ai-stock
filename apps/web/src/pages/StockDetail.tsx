@@ -59,11 +59,7 @@ export default function StockDetail() {
     <main className="detail-page">
       <div className="crumb">
         <Link className="back" to="/">
-          行情
-        </Link>
-        <span>/</span>
-        <Link className="back" to="/screening">
-          选股
+          AI 对话
         </Link>
         <span>/</span>
         <span>{quote?.name || symbol}</span>
