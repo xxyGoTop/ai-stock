@@ -5,6 +5,7 @@ import AnalysisPanel from '../components/AnalysisPanel'
 import DailyNote from '../components/DailyNote'
 import KlineChart from '../components/KlineChart'
 import PaperTicket from '../components/PaperTicket'
+import WatchButton from '../components/WatchButton'
 import { changeTone, formatChange } from '@ai-stock/business'
 import type { DataFreshness, IndicatorPoint, KlineBar, Quote } from '@ai-stock/types'
 
@@ -72,12 +73,13 @@ export default function StockDetail() {
       <section className="panel quote-panel">
         {quote ? (
           <>
-            <div className="header-line">
+            <div className="header-line wrap">
               <div>
                 <h1 className="quote-name">
                   {quote.name} <span className="muted">{quote.symbol}</span>
                 </h1>
                 <div className="muted">{quote.industry || quote.market}</div>
+                <WatchButton symbol={quote.symbol} name={quote.name} />
               </div>
               <div className="quote-price">
                 <div className={`price ${tone}`}>{quote.price.toFixed(2)}</div>

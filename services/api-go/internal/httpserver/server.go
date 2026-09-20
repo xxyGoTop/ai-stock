@@ -13,6 +13,7 @@ import (
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/paper"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/provider"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/python"
+	"github.com/xxyGoTop/ai-stock/services/api-go/internal/watchlist"
 	"github.com/xxyGoTop/ai-stock/services/api-go/pkg/response"
 )
 
@@ -20,6 +21,7 @@ type Server struct {
 	bundle *provider.Bundle
 	py     *python.Client
 	paper  *paper.Store
+	watch  *watchlist.Store
 	origin string
 }
 
@@ -28,7 +30,7 @@ func New(timeout time.Duration) *Server {
 	if origin == "" {
 		origin = "http://localhost:5273"
 	}
-	return &Server{bundle: provider.NewProviders(timeout), py: python.New(), paper: paper.New(), origin: origin}
+	return &Server{bundle: provider.NewProviders(timeout), py: python.New(), paper: paper.New(), watch: watchlist.New(), origin: origin}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -51,13 +53,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/paper/orders", s.paperOrders)
 	mux.HandleFunc("/api/v1/paper/positions", s.paperPositions)
 	mux.HandleFunc("/api/v1/paper/reset", s.paperReset)
+	mux.HandleFunc("/api/v1/watchlist/items/", s.watchItem)
+	mux.HandleFunc("/api/v1/watchlist/items", s.watchItems)
+	mux.HandleFunc("/api/v1/watchlist", s.watchlist)
 	return s.cors(mux)
 }
 
 func (s *Server) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", s.origin)
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -327,6 +332,83 @@ func (s *Server) paperOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.OK(w, acc)
+}
+
+func (s *Server) watchlist(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		response.Error(w, http.StatusMethodNotAllowed, "GET only")
+		return
+	}
+	items, err := s.watch.All()
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	for i := range items {
+		if q, e := s.bundle.Quote(items[i].Symbol); e == nil && q != nil {
+			items[i].Name = q.Name
+			items[i].Market = string(q.Market)
+			items[i].Price = q.Price
+			items[i].Change = q.Change
+			items[i].ChangePercent = q.ChangePercent
+			items[i].Industry = q.Industry
+		}
+	}
+	response.OK(w, map[string]interface{}{"items": items})
+}
+
+func (s *Server) watchItems(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodDelete {
+		s.removeWatch(w, r.URL.Query().Get("symbol"))
+		return
+	}
+	if r.Method != http.MethodPost {
+		response.Error(w, http.StatusMethodNotAllowed, "POST or DELETE")
+		return
+	}
+	var body struct {
+		Symbol string `json:"symbol"`
+		Name   string `json:"name"`
+		Market string `json:"market"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	body.Symbol = provider.PadSymbol(body.Symbol)
+	if q, err := s.bundle.Quote(body.Symbol); err == nil && q != nil {
+		if body.Name == "" {
+			body.Name = q.Name
+		}
+		body.Market = string(q.Market)
+	}
+	item, err := s.watch.Add(body.Symbol, body.Name, body.Market)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(w, item)
+}
+
+func (s *Server) watchItem(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		response.Error(w, http.StatusMethodNotAllowed, "DELETE only")
+		return
+	}
+	s.removeWatch(w, strings.TrimPrefix(r.URL.Path, "/api/v1/watchlist/items/"))
+}
+
+func (s *Server) removeWatch(w http.ResponseWriter, id string) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		response.Error(w, http.StatusBadRequest, "id required")
+		return
+	}
+	if err := s.watch.Remove(id); err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(w, map[string]string{"removed": provider.PadSymbol(id)})
 }
 
 func (s *Server) writeRaw(w http.ResponseWriter, raw json.RawMessage) {

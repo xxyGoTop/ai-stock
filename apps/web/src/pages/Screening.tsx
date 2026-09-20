@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listAlgorithms, runScreening } from '@ai-stock/api-client'
+import WatchButton from '../components/WatchButton'
 import { changeTone, formatChange } from '@ai-stock/business'
 import type { AlgorithmMeta, ScreenResult } from '@ai-stock/types'
 import { formatClock, loadScreening, saveScreening } from '../lib/cache'
@@ -109,8 +110,8 @@ export default function Screening() {
           </div>
           <div className="results">
             {picks.map((p) => (
-              <Link className="row screen-row" key={p.symbol} to={`/stock/${p.symbol}`}>
-                <div className="pick-main">
+              <div className="row screen-row" key={p.symbol}>
+                <Link className="pick-main" to={`/stock/${p.symbol}`}>
                   <div className="pick-title">
                     <strong>{p.name}</strong>
                     <span className="muted">{p.symbol}</span>
@@ -125,12 +126,13 @@ export default function Screening() {
                     ))}
                   </div>
                   <div className="muted pick-reason">{p.strategies[0]?.reason}</div>
-                </div>
+                </Link>
                 <div className="pick-side">
                   <div className="score">{p.score.toFixed(0)}</div>
                   <div className={changeTone(p.changePercent)}>{formatChange(p.changePercent)}</div>
+                  <WatchButton symbol={p.symbol} name={p.name} compact />
                 </div>
-              </Link>
+              </div>
             ))}
             {picks.length === 0 && <p className="muted">当前筛选没有命中。</p>}
           </div>

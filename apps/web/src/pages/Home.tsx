@@ -1,9 +1,11 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getHotFeed, getIndexQuotes, searchStocks } from '@ai-stock/api-client'
+import { getHotFeed, getIndexQuotes, getWatchlist, searchStocks } from '@ai-stock/api-client'
 import { changeTone, formatChange } from '@ai-stock/business'
-import type { HotFeed, Quote, Stock } from '@ai-stock/types'
+import type { HotFeed, Quote, Stock, WatchItem } from '@ai-stock/types'
+import WatchButton from '../components/WatchButton'
 import { loadHot, loadScreening, loadSearch, saveHot, saveSearch } from '../lib/cache'
+import { WATCH_EVENT } from '../lib/watch'
 
 export default function Home() {
   const search = loadSearch()
@@ -11,21 +13,31 @@ export default function Home() {
   const [list, setList] = useState<Stock[]>(search.list)
   const [indices, setIndices] = useState<Quote[]>([])
   const [feed, setFeed] = useState<HotFeed | null>(loadHot()?.feed || null)
+  const [watch, setWatch] = useState<WatchItem[]>([])
   const [error, setError] = useState('')
   const picks = loadScreening()?.result?.picks.slice(0, 6) || []
 
   useEffect(() => {
+    const loadWatch = () => {
+      getWatchlist()
+        .then((data) => setWatch(data.items))
+        .catch(() => setWatch([]))
+    }
+    loadWatch()
+    window.addEventListener(WATCH_EVENT, loadWatch)
     getIndexQuotes()
       .then(setIndices)
       .catch(() => setIndices([]))
     const cached = loadHot()
-    if (cached && Date.now() - cached.at < 60_000) return
-    getHotFeed(8)
-      .then((data) => {
-        setFeed(data)
-        saveHot(data)
-      })
-      .catch(() => undefined)
+    if (!cached || Date.now() - cached.at >= 60_000) {
+      getHotFeed(8)
+        .then((data) => {
+          setFeed(data)
+          saveHot(data)
+        })
+        .catch(() => undefined)
+    }
+    return () => window.removeEventListener(WATCH_EVENT, loadWatch)
   }, [])
 
   async function onSearch(e: FormEvent) {
@@ -55,12 +67,42 @@ export default function Home() {
         {list.length > 0 && (
           <div className="results">
             {list.map((s) => (
-              <Link className="row" key={`${s.market}${s.symbol}`} to={`/stock/${s.symbol}`}>
-                <strong>
-                  {s.name} <span className="muted">{s.symbol}</span>
-                </strong>
-                <span className="muted">{s.market}</span>
-              </Link>
+              <div className="row" key={`${s.market}${s.symbol}`}>
+                <Link className="pick-main" to={`/stock/${s.symbol}`}>
+                  <strong>
+                    {s.name} <span className="muted">{s.symbol}</span>
+                  </strong>
+                </Link>
+                <WatchButton symbol={s.symbol} name={s.name} compact />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="panel" style={{ marginTop: 16 }}>
+        <div className="header-line">
+          <h2 className="section-title">自选股</h2>
+          <span className="muted">{watch.length ? `${watch.length} 只` : '还没有自选'}</span>
+        </div>
+        {watch.length === 0 ? (
+          <p className="muted">搜索股票或打开个股详情，点「加入自选」后会显示在这里。</p>
+        ) : (
+          <div className="results">
+            {watch.map((it) => (
+              <div className="row" key={it.symbol}>
+                <Link className="pick-main" to={`/stock/${it.symbol}`}>
+                  <strong>
+                    {it.name} <span className="muted">{it.symbol}</span>
+                  </strong>
+                  <div className="muted">{it.industry || it.market}</div>
+                </Link>
+                <div className="pick-side">
+                  <div className={changeTone(it.changePercent || 0)}>{it.price ? it.price.toFixed(2) : '-'}</div>
+                  <div className={changeTone(it.changePercent || 0)}>{formatChange(it.changePercent || 0)}</div>
+                  <WatchButton symbol={it.symbol} name={it.name} compact />
+                </div>
+              </div>
             ))}
           </div>
         )}

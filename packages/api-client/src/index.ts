@@ -9,6 +9,8 @@ import type {
   DailyNote,
   HotFeed,
   PaperAccount,
+  WatchItem,
+  Watchlist,
   ScreenResult,
   Stock,
   StockAnalysis,
@@ -92,6 +94,30 @@ export function placePaperOrder(body: { symbol: string; name?: string; side: 'bu
 
 export function resetPaperAccount() {
   return post<PaperAccount>('/paper/reset', {})
+}
+
+export function getWatchlist() {
+  return get<Watchlist>('/watchlist')
+}
+
+export function addWatchItem(body: { symbol: string; name?: string; market?: string }) {
+  return post<WatchItem>('/watchlist/items', body)
+}
+
+export function removeWatchItem(symbol: string) {
+  return del<{ removed: string }>(`/watchlist/items/${encodeURIComponent(symbol)}`)
+}
+
+async function del<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { method: 'DELETE' })
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+  const payload = (await res.json()) as ApiResponse<T>
+  if (payload.code !== 0) {
+    throw new Error(payload.message || 'request failed')
+  }
+  return payload.data
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {

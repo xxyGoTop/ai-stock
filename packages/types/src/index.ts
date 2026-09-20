@@ -281,6 +281,23 @@ export interface PaperAccount {
   orders: PaperOrder[]
 }
 
+export interface WatchItem {
+  id: string
+  symbol: string
+  name: string
+  market: Market | string
+  sortOrder: number
+  createdAt: string
+  price?: number
+  change?: number
+  changePercent?: number
+  industry?: string
+}
+
+export interface Watchlist {
+  items: WatchItem[]
+}
+
 export interface ApiResponse<T> {
   code: number
   message: string

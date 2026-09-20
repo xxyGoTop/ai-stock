@@ -308,6 +308,30 @@ a {
 .pick-side {
   text-align: right;
   flex-shrink: 0;
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
+.watch-btn {
+  border: 1px solid var(--line);
+  background: #0d1526;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 10px;
+  min-height: 28px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.watch-btn.on {
+  color: var(--accent);
+  border-color: #5a4a28;
+}
+
+.quote-name + .muted + .watch-btn,
+.quote-panel .watch-btn {
+  margin-top: 8px;
 }
 
 .score {
