@@ -29,16 +29,63 @@ a {
 }
 
 .app {
-  max-width: 1080px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 20px 16px 48px;
+  padding: 18px 16px 56px;
 }
 
 .topbar {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 24px;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.nav {
+  display: flex;
+  gap: 4px;
+}
+
+.nav a {
+  color: var(--muted);
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.nav a.active {
+  color: var(--accent);
+  background: #1b2438;
+}
+
+.algo-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.pill {
+  border: 1px solid var(--line);
+  background: #0d1526;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.pill.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pill input {
+  margin-right: 6px;
+}
+
+.screen-row {
+  align-items: flex-start;
+  gap: 16px;
 }
 
 .brand {
@@ -83,6 +130,13 @@ a {
   padding: 0 16px;
   font-weight: 600;
   cursor: pointer;
+  min-height: 40px;
+}
+
+.ghost:disabled,
+.search-box button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .indices {
@@ -126,6 +180,11 @@ a {
   padding: 12px 14px;
   border-radius: 10px;
   background: #0d1526;
+  transition: background 0.15s;
+}
+
+.row:hover {
+  background: #152038;
 }
 
 .muted {
@@ -143,6 +202,26 @@ a {
   justify-content: space-between;
   align-items: flex-end;
   gap: 16px;
+}
+
+.header-line.wrap,
+.algo-pills.tight {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.section-title {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.tight {
+  margin: 0;
+}
+
+.tiny {
+  font-size: 12px;
+  margin-top: 4px;
 }
 
 .metrics {
@@ -171,13 +250,175 @@ a {
 
 .back {
   color: var(--muted);
-  display: inline-block;
+}
+
+.crumb {
+  display: flex;
+  gap: 8px;
+  align-items: center;
   margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.card {
+  background: #0d1526;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.card h3 {
+  margin: 0 0 8px;
+}
+
+.card.mini {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+}
+
+.pick-main {
+  min-width: 0;
+}
+
+.pick-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.pick-reason {
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+.pick-side {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.score {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tag-chip {
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.tag-chip.accent {
+  color: var(--accent);
+  border-color: #5a4a28;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 16px;
+}
+
+.board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.board-grid.compact {
+  margin-top: 4px;
+}
+
+.news-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.news-item {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #0d1526;
+}
+
+.news-item:hover {
+  background: #152038;
+}
+
+.news-meta {
+  display: flex;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.analysis {
+  margin-top: 12px;
+}
+
+.verdict {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.verdict.bullish {
+  color: var(--up);
+}
+
+.verdict.bearish {
+  color: var(--down);
+}
+
+.kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid #1a2438;
+}
+
+.kv:last-child {
+  border-bottom: 0;
 }
 
 @media (max-width: 720px) {
   .indices,
-  .metrics {
+  .metrics,
+  .split,
+  .board-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .split {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    flex-wrap: wrap;
   }
 }

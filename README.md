@@ -2,7 +2,7 @@
 
 AI 股票投研 + 智能选股 + 模拟交易平台（V1）。Web + Android，后端 Go，量化 / Agent 用 Python。
 
-当前进度：**Sprint 1 行情基础设施** — 搜索、实时行情、K 线、均线 / MACD / KDJ / RSI，以及 K 线新鲜度告警。
+当前进度：**行情 + 五算法选股（会话缓存）+ 个股分析 + 热点快讯 / 板块**。
 
 ## 数据源
 
@@ -10,6 +10,7 @@ AI 股票投研 + 智能选股 + 模拟交易平台（V1）。Web + Android，�
 |---|---|---|
 | 搜索 / 快照 / 板块 | 东方财富 | 腾讯 |
 | 日 K | 东财 / 腾讯 / 新浪 探测取最新 | 实时 bar 补当天 |
+| 热点快讯 | 东财重要快讯 | — |
 | 公告（后续） | 巨潮 | — |
 
 密钥不要提交。公开行情接口请控制频率。
@@ -30,18 +31,24 @@ $env:GOPROXY="https://goproxy.cn,direct"
 ```
 
 ```powershell
-# 后端
-cd services/api-go
-go run ./cmd/server
-
-# 前端（另开终端）
-cd ../..
-npm install --registry=https://registry.npmmirror.com
+# 三个终端
+npm run dev:api
+npm run dev:python
 npm run dev:web
 ```
 
+Python 依赖：`pip install -r services/ai-python/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple`
+
 - API: http://localhost:18080/health
-- Web: http://localhost:5173
+- Python: http://localhost:8090/health
+- Web: http://localhost:5273
+
+可选大模型密钥（不配也能用内置 `quant-rules`）：
+
+```
+LLM_DEEPSEEK_KEY
+LLM_QWEN_KEY
+```
 
 ## 仓库结构
 
@@ -50,7 +57,7 @@ apps/web            React + Vite
 apps/mobile         React Native 占位
 packages/           共享类型 / API Client
 services/api-go     业务 API + Provider
-services/ai-python  Agent / 算法（占位）
+services/ai-python  五算法 Registry + 选股 + LLM Router
 docs/               设计文档
 ```
 

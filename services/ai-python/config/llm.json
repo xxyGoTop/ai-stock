@@ -1,0 +1,95 @@
+{
+  "providers": [
+    {
+      "code": "quant-local",
+      "kind": "local",
+      "baseUrl": "",
+      "apiKeyRef": "",
+      "enabled": true
+    },
+    {
+      "code": "deepseek",
+      "kind": "openai_compatible",
+      "baseUrl": "https://api.deepseek.com",
+      "apiKeyRef": "env:LLM_DEEPSEEK_KEY",
+      "enabled": true
+    },
+    {
+      "code": "openai_compatible",
+      "kind": "openai_compatible",
+      "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "apiKeyRef": "env:LLM_QWEN_KEY",
+      "enabled": true
+    }
+  ],
+  "models": [
+    {
+      "code": "quant-rules",
+      "providerCode": "quant-local",
+      "modelName": "quant-rules",
+      "roles": ["analyst", "judge"],
+      "maxTokens": 2048,
+      "timeoutMs": 5000,
+      "costTier": "free",
+      "enabled": true
+    },
+    {
+      "code": "deepseek-chat",
+      "providerCode": "deepseek",
+      "modelName": "deepseek-chat",
+      "roles": ["analyst", "screener", "judge"],
+      "maxTokens": 2048,
+      "timeoutMs": 60000,
+      "costTier": "low",
+      "enabled": true
+    },
+    {
+      "code": "qwen-plus",
+      "providerCode": "openai_compatible",
+      "modelName": "qwen-plus",
+      "roles": ["analyst", "judge"],
+      "maxTokens": 2048,
+      "timeoutMs": 90000,
+      "costTier": "mid",
+      "enabled": true
+    }
+  ],
+  "profiles": [
+    {
+      "code": "stock_analysis_fast",
+      "name": "快速",
+      "task": "stock_analysis",
+      "mode": "single",
+      "models": [{ "modelCode": "quant-rules", "weight": 1, "temperature": 0 }],
+      "fallback": [],
+      "enabled": true
+    },
+    {
+      "code": "stock_analysis_default",
+      "name": "默认回退",
+      "task": "stock_analysis",
+      "mode": "fallback",
+      "models": [
+        { "modelCode": "deepseek-chat", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "qwen-plus", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "quant-rules", "weight": 1, "temperature": 0 }
+      ],
+      "fallback": ["deepseek-chat", "qwen-plus", "quant-rules"],
+      "enabled": true
+    },
+    {
+      "code": "stock_analysis_ensemble",
+      "name": "多模型综合",
+      "task": "stock_analysis",
+      "mode": "ensemble",
+      "models": [
+        { "modelCode": "quant-rules", "weight": 0.3, "temperature": 0 },
+        { "modelCode": "deepseek-chat", "weight": 0.4, "temperature": 0.2 },
+        { "modelCode": "qwen-plus", "weight": 0.3, "temperature": 0.2 }
+      ],
+      "fallback": ["quant-rules"],
+      "judgeModelCode": "quant-rules",
+      "enabled": true
+    }
+  ]
+}

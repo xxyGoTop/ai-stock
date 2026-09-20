@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import * as echarts from 'echarts'
 import { getIndicators, getKline, getStock } from '@ai-stock/api-client'
+import AnalysisPanel from '../components/AnalysisPanel'
 import { changeTone, formatChange } from '@ai-stock/business'
 import type { DataFreshness, IndicatorPoint, KlineBar, Quote } from '@ai-stock/types'
 
@@ -17,17 +18,32 @@ export default function StockDetail() {
   useEffect(() => {
     let cancelled = false
     setError('')
-    Promise.all([getStock(symbol), getKline(symbol, 180), getIndicators(symbol, 180)])
-      .then(([q, k, ind]) => {
-        if (cancelled) return
-        setQuote(q)
-        setBars(k.bars)
-        setSeries(ind.series)
-        setFreshness(ind.freshness)
+    setBars([])
+    setSeries([])
+    setFreshness(null)
+    getStock(symbol)
+      .then((q) => {
+        if (!cancelled) setQuote(q)
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : '加载失败')
+        if (!cancelled) setError(err instanceof Error ? err.message : '行情加载失败')
       })
+    getKline(symbol, 180)
+      .then((k) => {
+        if (cancelled) return
+        setBars(k.bars)
+        setFreshness(k.freshness)
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'K线加载失败')
+      })
+    getIndicators(symbol, 180)
+      .then((ind) => {
+        if (cancelled) return
+        setSeries(ind.series)
+        if (ind.freshness) setFreshness(ind.freshness)
+      })
+      .catch(() => undefined)
     return () => {
       cancelled = true
     }
@@ -82,9 +98,17 @@ export default function StockDetail() {
 
   return (
     <main>
-      <Link className="back" to="/">
-        ← 返回搜索
-      </Link>
+      <div className="crumb">
+        <Link className="back" to="/">
+          行情
+        </Link>
+        <span className="muted">/</span>
+        <Link className="back" to="/screening">
+          选股
+        </Link>
+        <span className="muted">/</span>
+        <span>{quote?.name || symbol}</span>
+      </div>
       {error && <p className="warn">{error}</p>}
       {quote && (
         <section className="panel">
@@ -127,6 +151,7 @@ export default function StockDetail() {
           <div ref={chartRef} className="chart" />
         </section>
       )}
+      {quote && <AnalysisPanel symbol={symbol} />}
     </main>
   )
 }

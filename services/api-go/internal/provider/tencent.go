@@ -87,18 +87,35 @@ func (b *Bundle) KlinesTencent(symbol string, limit int, market Market) ([]Kline
 		limit = 180
 	}
 	ms := MarketSymbol(symbol, market)
-	u := fmt.Sprintf("https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=%s,day,,,%d,qfq", ms, limit)
-	var payload map[string]interface{}
-	if err := getJSON(b.Client, u, "https://gu.qq.com/", &payload); err != nil {
-		return nil, err
+	urls := []string{
+		fmt.Sprintf("https://web.ifzq.gtimg.cn/appstock/app/newfqkline/get?param=%s,day,,,%d,qfq", ms, limit),
+		fmt.Sprintf("https://proxy.finance.qq.com/ifzqgtimg/appstock/app/fqkline/get?param=%s,day,,,%d,qfq", ms, limit),
+		fmt.Sprintf("https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=%s,day,,,%d,qfq", ms, limit),
 	}
-	data, _ := payload["data"].(map[string]interface{})
-	node, _ := data[ms].(map[string]interface{})
-	raw, _ := node["qfqday"].([]interface{})
-	if len(raw) == 0 {
-		raw, _ = node["day"].([]interface{})
+	var last error
+	for _, u := range urls {
+		var payload map[string]interface{}
+		if err := getJSON(b.Client, u, "https://gu.qq.com/", &payload); err != nil {
+			last = err
+			continue
+		}
+		data, _ := payload["data"].(map[string]interface{})
+		node, _ := data[ms].(map[string]interface{})
+		raw, _ := node["qfqday"].([]interface{})
+		if len(raw) == 0 {
+			raw, _ = node["day"].([]interface{})
+		}
+		bars, err := parseTencentKlines(raw)
+		if err != nil {
+			last = err
+			continue
+		}
+		return bars, nil
 	}
-	return parseTencentKlines(raw)
+	if last == nil {
+		last = fmt.Errorf("tencent kline empty")
+	}
+	return nil, last
 }
 
 func parseTencentKlines(raw []interface{}) ([]KlineBar, error) {

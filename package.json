@@ -10,6 +10,7 @@
   "scripts": {
     "dev:web": "npm run dev -w @ai-stock/web",
     "dev:api": "cd services/api-go && go run ./cmd/server",
+    "dev:python": "cd services/ai-python && python -m uvicorn main:app --host 127.0.0.1 --port 8090",
     "build:web": "npm run build -w @ai-stock/web"
   }
 }

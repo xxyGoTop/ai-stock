@@ -1,0 +1,296 @@
+from __future__ import annotations
+
+import json
+import re
+import urllib.parse
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36"
+EM_HOSTS = [
+    "https://push2.eastmoney.com",
+    "https://82.push2.eastmoney.com",
+    "https://push2delay.eastmoney.com",
+]
+FS = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"
+JSONP = re.compile(r"^[a-zA-Z0-9_]+\(")
+
+
+def _get(url: str, referer: str) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": UA, "Referer": referer, "Accept": "*/*"})
+    with urllib.request.urlopen(req, timeout=8) as res:
+        return res.read()
+
+
+def _json(url: str, referer: str):
+    raw = _get(url, referer).decode("utf-8", "ignore").strip()
+    if JSONP.match(raw):
+        raw = raw[raw.find("(") + 1 :]
+        raw = raw.rstrip(";").rstrip(")")
+    return json.loads(raw)
+
+
+def _num(v):
+    try:
+        n = float(v)
+        return n if n == n else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def guess_market(code: str) -> str:
+    c = str(code).zfill(6)
+    return "SH" if c[:1] in "695" else "SZ"
+
+
+def market_symbol(code: str) -> str:
+    c = str(code).zfill(6)
+    return ("sh" if guess_market(c) == "SH" else "sz") + c
+
+
+def fetch_active_stocks(pages=4, page_size=100, fid="f6") -> list[dict]:
+    fields = "f12,f13,f14,f2,f3,f4,f5,f6,f8,f10,f100"
+    out = []
+    for pn in range(1, pages + 1):
+        query = (
+            f"pn={pn}&pz={page_size}&po=1&np=1&fltt=2&invt=2&fid={fid}"
+            f"&fs={urllib.parse.quote(FS)}&fields={fields}"
+        )
+        data = None
+        for host in EM_HOSTS:
+            try:
+                data = _json(f"{host}/api/qt/clist/get?{query}", "https://quote.eastmoney.com/")
+                break
+            except Exception:
+                continue
+        rows = ((data or {}).get("data") or {}).get("diff") or []
+        if not rows:
+            break
+        for item in rows:
+            code = str(item.get("f12") or "").zfill(6)
+            name = str(item.get("f14") or "").strip()
+            if not code or not name:
+                continue
+            out.append(
+                {
+                    "symbol": code,
+                    "name": name,
+                    "market": "SH" if _num(item.get("f13")) == 1 else "SZ",
+                    "price": _num(item.get("f2")),
+                    "changePercent": _num(item.get("f3")),
+                    "change": _num(item.get("f4")),
+                    "volume": _num(item.get("f5")),
+                    "amount": _num(item.get("f6")),
+                    "turnover": _num(item.get("f8")),
+                    "volumeRatio": _num(item.get("f10")),
+                    "industry": str(item.get("f100") or "").strip(),
+                }
+            )
+    uniq = {}
+    for s in out:
+        uniq[s["symbol"]] = s
+    return list(uniq.values())
+
+
+def fetch_market_returns(pages=12) -> list[dict]:
+    fields = "f12,f14,f109,f24,f25"
+    rows = []
+    for pn in range(1, pages + 1):
+        query = (
+            f"pn={pn}&pz=100&po=1&np=1&fltt=2&invt=2&fid=f12"
+            f"&fs={urllib.parse.quote(FS)}&fields={fields}"
+        )
+        data = None
+        for host in EM_HOSTS:
+            try:
+                data = _json(f"{host}/api/qt/clist/get?{query}", "https://quote.eastmoney.com/")
+                break
+            except Exception:
+                continue
+        diff = ((data or {}).get("data") or {}).get("diff") or []
+        if not diff:
+            break
+        for item in diff:
+            code = str(item.get("f12") or "").zfill(6)
+            name = str(item.get("f14") or "")
+            if not code or "ST" in name.upper():
+                continue
+            rows.append(
+                {
+                    "code": code,
+                    "change5": _num(item.get("f109")),
+                    "change60": _num(item.get("f24")),
+                    "changeYtd": _num(item.get("f25")),
+                }
+            )
+        if len(diff) < 100:
+            break
+    return rows
+
+
+def fetch_quote(code: str) -> dict | None:
+    code = str(code).zfill(6)
+    market = 1 if guess_market(code) == "SH" else 0
+    fields = "f12,f13,f14,f2,f3,f4,f5,f6,f8,f10,f100"
+    query = f"fltt=2&invt=2&fields={fields}&secids={market}.{code}"
+    for host in EM_HOSTS:
+        try:
+            data = _json(f"{host}/api/qt/ulist.np/get?{query}", "https://quote.eastmoney.com/")
+            rows = ((data or {}).get("data") or {}).get("diff") or []
+            if not rows:
+                continue
+            item = rows[0]
+            return {
+                "symbol": str(item.get("f12") or code).zfill(6),
+                "name": str(item.get("f14") or "").strip(),
+                "market": "SH" if _num(item.get("f13")) == 1 else "SZ",
+                "price": _num(item.get("f2")),
+                "changePercent": _num(item.get("f3")),
+                "change": _num(item.get("f4")),
+                "volume": _num(item.get("f5")),
+                "amount": _num(item.get("f6")),
+                "turnover": _num(item.get("f8")),
+                "volumeRatio": _num(item.get("f10")),
+                "industry": str(item.get("f100") or "").strip(),
+            }
+        except Exception:
+            continue
+    return None
+
+
+def fetch_klines_tencent(code: str, limit=260) -> list[dict]:
+    ms = market_symbol(code)
+    urls = [
+        f"https://web.ifzq.gtimg.cn/appstock/app/newfqkline/get?param={ms},day,,,{limit},qfq",
+        f"https://proxy.finance.qq.com/ifzqgtimg/appstock/app/fqkline/get?param={ms},day,,,{limit},qfq",
+        f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={ms},day,,,{limit},qfq",
+    ]
+    data = None
+    last = None
+    for url in urls:
+        try:
+            data = _json(url, "https://gu.qq.com/")
+            break
+        except Exception as exc:
+            last = exc
+    if data is None:
+        raise last or RuntimeError("tencent kline empty")
+    node = ((data.get("data") or {}).get(ms) or {})
+    raw = node.get("qfqday") or node.get("day") or []
+    out = []
+    prev = 0.0
+    for row in raw:
+        if not isinstance(row, (list, tuple)) or len(row) < 6:
+            continue
+        open_, close, high, low, volume = map(_num, row[1:6])
+        chg = ((close - prev) / prev * 100) if prev else 0
+        out.append(
+            {
+                "date": str(row[0])[:10],
+                "open": open_,
+                "close": close,
+                "high": high,
+                "low": low,
+                "volume": volume,
+                "changePercent": chg,
+                "turnover": 0,
+            }
+        )
+        prev = close
+    return out
+
+
+def fetch_klines_sina(code: str, limit=260) -> list[dict]:
+    ms = market_symbol(code)
+    url = (
+        "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData"
+        f"?symbol={ms}&scale=240&ma=5&datalen={limit}"
+    )
+    raw = _json(url, "https://finance.sina.com.cn/")
+    out = []
+    prev = 0.0
+    for row in raw or []:
+        if not isinstance(row, dict):
+            continue
+        close = _num(row.get("close"))
+        chg = ((close - prev) / prev * 100) if prev else 0
+        out.append(
+            {
+                "date": str(row.get("day") or "")[:10],
+                "open": _num(row.get("open")),
+                "close": close,
+                "high": _num(row.get("high")),
+                "low": _num(row.get("low")),
+                "volume": _num(row.get("volume")),
+                "changePercent": chg,
+                "turnover": 0,
+            }
+        )
+        prev = close
+    return out
+
+
+def fetch_klines_eastmoney(code: str, limit=260) -> list[dict]:
+    market = 1 if guess_market(code) == "SH" else 0
+    path = (
+        f"/api/qt/stock/kline/get?secid={market}.{str(code).zfill(6)}"
+        "&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
+        f"&klt=101&fqt=1&end=20500101&lmt={limit}"
+    )
+    hosts = [
+        "https://push2his.eastmoney.com",
+        "https://push2delay.eastmoney.com",
+        "https://82.push2.eastmoney.com",
+    ]
+    for host in hosts:
+        try:
+            data = _json(host + path, "https://quote.eastmoney.com/")
+        except Exception:
+            continue
+        raw = ((data or {}).get("data") or {}).get("klines") or []
+        out = []
+        for line in raw:
+            parts = str(line).split(",")
+            if len(parts) < 7:
+                continue
+            out.append(
+                {
+                    "date": parts[0][:10],
+                    "open": _num(parts[1]),
+                    "close": _num(parts[2]),
+                    "high": _num(parts[3]),
+                    "low": _num(parts[4]),
+                    "volume": _num(parts[5]),
+                    "changePercent": _num(parts[8]) if len(parts) > 8 else 0,
+                    "turnover": _num(parts[9]) if len(parts) > 9 else 0,
+                }
+            )
+        if out:
+            return out
+    return []
+
+
+def fetch_klines(code: str, limit=260) -> list[dict]:
+    for fn in (fetch_klines_tencent, fetch_klines_sina, fetch_klines_eastmoney):
+        try:
+            bars = fn(code, limit)
+            if len(bars) >= 10:
+                return bars
+        except Exception:
+            continue
+    return []
+
+
+def fetch_klines_many(codes: list[str], limit=260, workers=10) -> dict[str, list]:
+    result = {}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futs = {pool.submit(fetch_klines, c, limit): c for c in codes}
+        for fut in as_completed(futs):
+            code = futs[fut]
+            try:
+                bars = fut.result()
+                if len(bars) >= 60:
+                    result[code] = bars
+            except Exception:
+                continue
+    return result

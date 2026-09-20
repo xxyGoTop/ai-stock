@@ -1,4 +1,16 @@
-import type { ApiResponse, IndicatorResult, KlineBar, Quote, Stock } from '@ai-stock/types'
+import type {
+  AlgorithmMeta,
+  AnalysisProfile,
+  ApiResponse,
+  IndicatorResult,
+  KlineBar,
+  LlmModel,
+  Quote,
+  HotFeed,
+  ScreenResult,
+  Stock,
+  StockAnalysis,
+} from '@ai-stock/types'
 
 const API_BASE = (import.meta as { env?: { VITE_API_BASE?: string } }).env?.VITE_API_BASE || '/api/v1'
 
@@ -38,4 +50,44 @@ export function getIndicators(symbol: string, limit = 180) {
 
 export function getIndexQuotes() {
   return get<Quote[]>('/quotes/indices')
+}
+
+export function listAlgorithms() {
+  return get<{ items: AlgorithmMeta[] }>('/algorithms').then((d) => d.items)
+}
+
+export function runScreening(body: { detail?: number; limit?: number; algorithms?: string[] } = {}) {
+  return post<ScreenResult>('/screening', body)
+}
+
+export function listLlmModels() {
+  return get<{ items: LlmModel[] }>('/llm/models').then((d) => d.items)
+}
+
+export function listAnalysisProfiles() {
+  return get<{ items: AnalysisProfile[] }>('/analysis-profiles').then((d) => d.items)
+}
+
+export function analyzeStock(symbol: string, profileCode?: string) {
+  return post<StockAnalysis>('/ai/analyze', { symbol, profileCode })
+}
+
+export function getHotFeed(limit = 15) {
+  return get<HotFeed>(`/hot?limit=${limit}`)
+}
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+  const payload = (await res.json()) as ApiResponse<T>
+  if (payload.code !== 0) {
+    throw new Error(payload.message || 'request failed')
+  }
+  return payload.data
 }

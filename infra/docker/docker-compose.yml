@@ -6,7 +6,8 @@ services:
       - "18080:18080"
     environment:
       API_ADDR: :18080
-      WEB_ORIGIN: http://localhost:5173
+      WEB_ORIGIN: http://localhost:5273
+      AI_PYTHON_URL: http://ai-python:8090
 
   ai-python:
     build:
