@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import {
   companionChatStream,
   getCompanionBriefing,
@@ -47,6 +47,35 @@ const QUICK = [
 ]
 
 const ANOMALY_SEEN_KEY = 'ai-stock.anomaly.seen'
+const LAYOUT_KEY = 'ai-stock.layout.v1'
+const WS_MIN = 280
+const WS_MAX = 720
+const WS_DEFAULT = 420
+
+type LayoutPrefs = { sideCollapsed: boolean; wsWidth: number; wsCollapsed: boolean }
+
+function loadLayout(): LayoutPrefs {
+  try {
+    const raw = localStorage.getItem(LAYOUT_KEY)
+    if (!raw) return { sideCollapsed: false, wsWidth: WS_DEFAULT, wsCollapsed: false }
+    const p = JSON.parse(raw) as Partial<LayoutPrefs>
+    return {
+      sideCollapsed: !!p.sideCollapsed,
+      wsCollapsed: !!p.wsCollapsed,
+      wsWidth: Math.min(WS_MAX, Math.max(WS_MIN, Number(p.wsWidth) || WS_DEFAULT)),
+    }
+  } catch {
+    return { sideCollapsed: false, wsWidth: WS_DEFAULT, wsCollapsed: false }
+  }
+}
+
+function saveLayout(p: LayoutPrefs) {
+  try {
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify(p))
+  } catch {
+    /* ignore */
+  }
+}
 
 function applyConversation(c: Conversation) {
   return {
@@ -83,6 +112,11 @@ export default function Chat() {
   const cancelIntentRef = useRef(false)
   const liveProgressRef = useRef<ResearchStep[]>([])
   const liveToolsRef = useRef<ToolLine[]>([])
+  const layoutInit = loadLayout()
+  const [sideCollapsed, setSideCollapsed] = useState(layoutInit.sideCollapsed)
+  const [wsCollapsed, setWsCollapsed] = useState(layoutInit.wsCollapsed)
+  const [wsWidth, setWsWidth] = useState(layoutInit.wsWidth)
+  const dragRef = useRef<{ startX: number; startW: number } | null>(null)
 
   function refreshList() {
     setConversations(listConversations())
@@ -505,11 +539,69 @@ export default function Chat() {
 
   const tab = workspace.tab || 'overview'
 
+  useEffect(() => {
+    saveLayout({ sideCollapsed, wsWidth, wsCollapsed })
+  }, [sideCollapsed, wsWidth, wsCollapsed])
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const d = dragRef.current
+      if (!d) return
+      // 拖拽条在工作台左侧：向左拖 → 工作台变宽
+      const next = Math.min(WS_MAX, Math.max(WS_MIN, d.startW + (d.startX - e.clientX)))
+      setWsWidth(next)
+    }
+    const onUp = () => {
+      dragRef.current = null
+      document.body.classList.remove('resizing-workspace')
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
+
+  function startWsResize(e: ReactMouseEvent) {
+    e.preventDefault()
+    dragRef.current = { startX: e.clientX, startW: wsWidth }
+    document.body.classList.add('resizing-workspace')
+  }
+
+  function shrinkWs() {
+    if (wsCollapsed) return
+    if (wsWidth <= WS_MIN + 20) {
+      setWsCollapsed(true)
+      return
+    }
+    setWsWidth((w) => Math.max(WS_MIN, w - 80))
+  }
+
+  function growWs() {
+    if (wsCollapsed) {
+      setWsCollapsed(false)
+      return
+    }
+    setWsWidth((w) => Math.min(WS_MAX, w + 80))
+  }
+
+  const gridCols = [
+    sideCollapsed ? '44px' : '200px',
+    'minmax(0, 1fr)',
+    wsCollapsed ? '44px' : `${wsWidth}px`,
+  ].join(' ')
+
   return (
-    <main className="companion with-sessions">
+    <main
+      className={`companion with-sessions${sideCollapsed ? ' side-collapsed' : ''}${wsCollapsed ? ' ws-collapsed' : ''}`}
+      style={{ gridTemplateColumns: gridCols }}
+    >
       <SessionSidebar
         conversations={conversations}
         activeId={activeId}
+        collapsed={sideCollapsed}
+        onToggleCollapse={() => setSideCollapsed((v) => !v)}
         onSelect={onSelectSession}
         onCreate={onCreateSession}
         onDelete={onDeleteSession}
@@ -525,6 +617,16 @@ export default function Chat() {
             </p>
           </div>
           <div className="head-actions">
+            {sideCollapsed && (
+              <button type="button" className="ghost-btn" onClick={() => setSideCollapsed(false)} title="展开会话栏">
+                会话
+              </button>
+            )}
+            {wsCollapsed && (
+              <button type="button" className="ghost-btn" onClick={() => setWsCollapsed(false)} title="展开工作台">
+                工作台
+              </button>
+            )}
             <button type="button" className="ghost-btn" disabled={loading} onClick={onCreateSession}>
               新会话
             </button>
@@ -611,127 +713,176 @@ export default function Chat() {
         </form>
       </section>
 
-      <aside className="companion-workspace panel">
-        <header className="workspace-head">
-          <div>
-            <h2>研究工作台</h2>
-            <p className="muted">
-              {workspace.type === 'stock'
-                ? `${workspace.name || quote?.name || ''} ${workspace.symbol || ''}`
-                : '今日市场'}
-            </p>
+      <aside className={`companion-workspace panel${wsCollapsed ? ' collapsed' : ''}`}>
+        {wsCollapsed ? (
+          <div className="ws-rail">
+            <button type="button" className="side-rail-btn" onClick={() => setWsCollapsed(false)} title="展开工作台">
+              ≪
+            </button>
+            <button type="button" className="side-rail-btn" onClick={growWs} title="放大工作台">
+              +
+            </button>
+            <span className="ws-rail-label">台</span>
           </div>
-          {workspace.type === 'stock' && workspace.symbol && (
-            <div className="workspace-tabs">
-              {(['overview', 'kline', 'analysis', 'paper'] as const).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  className={`pill ${tab === t ? 'on' : ''}`}
-                  onClick={() => setWorkspace((w) => ({ ...w, tab: t }))}
-                >
-                  {{ overview: '概览', kline: 'K线', analysis: '分析', paper: '模拟' }[t]}
-                </button>
-              ))}
-            </div>
-          )}
-        </header>
-
-        {workspace.type !== 'stock' && briefing && (
-          <div className="workspace-market">
-            <div className="index-grid">
-              {briefing.indices.map((q) => (
-                <div className="index-card" key={q.symbol}>
-                  <div className="muted">{q.name}</div>
-                  <strong className={q.changePercent >= 0 ? 'up' : 'down'}>{q.price.toFixed(2)}</strong>
-                  <span className={q.changePercent >= 0 ? 'up' : 'down'}>
-                    {q.changePercent >= 0 ? '+' : ''}
-                    {q.changePercent.toFixed(2)}%
-                  </span>
-                </div>
-              ))}
-            </div>
-            {briefing.northbound && (
-              <div className="workspace-block">
-                <h3>北向资金</h3>
-                <p>{briefing.northbound.text}</p>
+        ) : (
+          <>
+            <div
+              className="workspace-resizer"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="拖动调整工作台宽度"
+              onMouseDown={startWsResize}
+            />
+            <header className="workspace-head">
+              <div>
+                <h2>研究工作台</h2>
                 <p className="muted">
-                  沪 {briefing.northbound.shNetInflow.toFixed(1)} 亿 · 深 {briefing.northbound.szNetInflow.toFixed(1)} 亿
-                  {briefing.northbound.asOf ? ` · ${briefing.northbound.asOf}` : ''}
+                  {workspace.type === 'stock'
+                    ? `${workspace.name || quote?.name || ''} ${workspace.symbol || ''}`
+                    : '今日市场'}
                 </p>
               </div>
-            )}
-            <div className="workspace-block">
-              <h3>主流板块</h3>
-              <div className="board-list">
-                {briefing.boards.slice(0, 8).map((b) => (
-                  <button
-                    type="button"
-                    className="board-row"
-                    key={b.code}
-                    onClick={() => b.leaderCode && onPickSymbol(b.leaderCode, b.leader)}
-                  >
-                    <span>{b.name}</span>
-                    <span className={b.changePercent >= 0 ? 'up' : 'down'}>
-                      {b.changePercent >= 0 ? '+' : ''}
-                      {b.changePercent.toFixed(2)}%
-                    </span>
-                    <span className="muted">{b.leader}</span>
+              <div className="workspace-head-actions">
+                <div className="ws-size-controls">
+                  <button type="button" className="ghost-btn" onClick={shrinkWs} title="缩小工作台">
+                    −
                   </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {workspace.type === 'stock' && (
-          <div className="workspace-stock">
-            {quote && (
-              <div className="workspace-quote">
-                <div>
-                  <h3>
-                    {quote.name} <span className="muted">{quote.symbol}</span>
-                  </h3>
-                  <p className={quote.changePercent >= 0 ? 'up' : 'down'}>
-                    {quote.price.toFixed(2)}{' '}
-                    <span>
-                      {quote.changePercent >= 0 ? '+' : ''}
-                      {quote.changePercent.toFixed(2)}%
-                    </span>
-                  </p>
-                </div>
-                <WatchButton symbol={quote.symbol} name={quote.name} />
-              </div>
-            )}
-
-            {(tab === 'overview' || tab === 'kline') && bars.length > 0 && (
-              <div className="workspace-kline">
-                <KlineChart bars={bars} series={series} />
-              </div>
-            )}
-
-            {tab === 'analysis' && quote && (
-              <div className="workspace-block">
-                <p className="muted">完整分析结论在左侧对话中。可继续追问或切换到模拟交易。</p>
-                <div className="action-row">
-                  <button type="button" className="pill" onClick={() => onAction('analyze', quote.symbol, quote.name)}>
-                    再分析一次
+                  <button type="button" className="ghost-btn" onClick={growWs} title="放大工作台">
+                    +
                   </button>
-                  <button type="button" className="pill" onClick={() => onAction('kline', quote.symbol, quote.name)}>
-                    看 K 线
-                  </button>
-                  <button type="button" className="pill" onClick={() => onAction('paper', quote.symbol, quote.name)}>
-                    模拟交易
+                  <button type="button" className="ghost-btn" onClick={() => setWsCollapsed(true)} title="收起工作台">
+                    ≫
                   </button>
                 </div>
+                {workspace.type === 'stock' && workspace.symbol && (
+                  <div className="workspace-tabs">
+                    {(['overview', 'kline', 'analysis', 'paper'] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        className={`pill ${tab === t ? 'on' : ''}`}
+                        onClick={() => setWorkspace((w) => ({ ...w, tab: t }))}
+                      >
+                        {{ overview: '概览', kline: 'K线', analysis: '分析', paper: '模拟' }[t]}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </header>
+
+            {workspace.type !== 'stock' && briefing && (
+              <div className="workspace-market">
+                <div className="index-grid">
+                  {briefing.indices.map((q) => (
+                    <div className="index-card" key={q.symbol}>
+                      <div className="muted">{q.name}</div>
+                      <strong className={q.changePercent >= 0 ? 'up' : 'down'}>{q.price.toFixed(2)}</strong>
+                      <span className={q.changePercent >= 0 ? 'up' : 'down'}>
+                        {q.changePercent >= 0 ? '+' : ''}
+                        {q.changePercent.toFixed(2)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {briefing.northbound && (
+                  <div className="workspace-block">
+                    <h3>北向资金</h3>
+                    <p>{briefing.northbound.text}</p>
+                    <p className="muted">
+                      沪 {briefing.northbound.shNetInflow.toFixed(1)} 亿 · 深{' '}
+                      {briefing.northbound.szNetInflow.toFixed(1)} 亿
+                      {briefing.northbound.asOf ? ` · ${briefing.northbound.asOf}` : ''}
+                    </p>
+                  </div>
+                )}
+                <div className="workspace-block">
+                  <h3>主流板块</h3>
+                  <div className="board-list">
+                    {briefing.boards.slice(0, 8).map((b) => (
+                      <button
+                        type="button"
+                        className="board-row"
+                        key={b.code}
+                        onClick={() => b.leaderCode && onPickSymbol(b.leaderCode, b.leader)}
+                      >
+                        <span>{b.name}</span>
+                        <span className={b.changePercent >= 0 ? 'up' : 'down'}>
+                          {b.changePercent >= 0 ? '+' : ''}
+                          {b.changePercent.toFixed(2)}%
+                        </span>
+                        <span className="muted">{b.leader}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
-            {tab === 'paper' && quote && <PaperTicket symbol={quote.symbol} name={quote.name} price={quote.price} />}
-          </div>
-        )}
+            {workspace.type === 'stock' && (
+              <div className="workspace-stock">
+                {quote && (
+                  <div className="workspace-quote">
+                    <div>
+                      <h3>
+                        {quote.name} <span className="muted">{quote.symbol}</span>
+                      </h3>
+                      <p className={quote.changePercent >= 0 ? 'up' : 'down'}>
+                        {quote.price.toFixed(2)}{' '}
+                        <span>
+                          {quote.changePercent >= 0 ? '+' : ''}
+                          {quote.changePercent.toFixed(2)}%
+                        </span>
+                      </p>
+                    </div>
+                    <WatchButton symbol={quote.symbol} name={quote.name} />
+                  </div>
+                )}
 
-        {workspace.type === 'empty' && <p className="muted pad">从对话开始，研究目标会出现在这里。</p>}
+                {(tab === 'overview' || tab === 'kline') && bars.length > 0 && (
+                  <div className="workspace-kline">
+                    <KlineChart bars={bars} series={series} />
+                  </div>
+                )}
+
+                {tab === 'analysis' && quote && (
+                  <div className="workspace-block">
+                    <p className="muted">完整分析结论在左侧对话中。可继续追问或切换到模拟交易。</p>
+                    <div className="action-row">
+                      <button
+                        type="button"
+                        className="pill"
+                        onClick={() => onAction('analyze', quote.symbol, quote.name)}
+                      >
+                        再分析一次
+                      </button>
+                      <button
+                        type="button"
+                        className="pill"
+                        onClick={() => onAction('kline', quote.symbol, quote.name)}
+                      >
+                        看 K 线
+                      </button>
+                      <button
+                        type="button"
+                        className="pill"
+                        onClick={() => onAction('paper', quote.symbol, quote.name)}
+                      >
+                        模拟交易
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {tab === 'paper' && quote && (
+                  <PaperTicket symbol={quote.symbol} name={quote.name} price={quote.price} />
+                )}
+              </div>
+            )}
+
+            {workspace.type === 'empty' && <p className="muted pad">从对话开始，研究目标会出现在这里。</p>}
+          </>
+        )}
       </aside>
     </main>
   )

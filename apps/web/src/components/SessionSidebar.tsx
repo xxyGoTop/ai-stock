@@ -4,21 +4,49 @@ import { dayLabel } from '../lib/chatSession'
 type Props = {
   conversations: Conversation[]
   activeId: string
+  collapsed?: boolean
+  onToggleCollapse?: () => void
   onSelect: (id: string) => void
   onCreate: () => void
   onDelete: (id: string) => void
 }
 
-export default function SessionSidebar({ conversations, activeId, onSelect, onCreate, onDelete }: Props) {
+export default function SessionSidebar({
+  conversations,
+  activeId,
+  collapsed,
+  onToggleCollapse,
+  onSelect,
+  onCreate,
+  onDelete,
+}: Props) {
   const groups = groupByDay(conversations)
+
+  if (collapsed) {
+    return (
+      <aside className="session-sidebar panel collapsed" title="会话栏已收起">
+        <button type="button" className="side-rail-btn" onClick={onToggleCollapse} title="展开会话栏">
+          ≫
+        </button>
+        <button type="button" className="side-rail-btn" onClick={onCreate} title="新建会话">
+          +
+        </button>
+      </aside>
+    )
+  }
 
   return (
     <aside className="session-sidebar panel">
       <div className="session-side-head">
         <strong>会话</strong>
-        <button type="button" className="ghost-btn" onClick={onCreate}>
-          + 新建
-        </button>
+        <div className="session-side-actions">
+          <button type="button" className="ghost-btn" onClick={onCreate}>
+            + 新建
+          </button>
+          <button type="button" className="ghost-btn side-collapse-btn" onClick={onToggleCollapse} title="收起会话栏">
+            ≪
+          </button>
+        </div>
       </div>
       <div className="session-list">
         {groups.map((g) => (
