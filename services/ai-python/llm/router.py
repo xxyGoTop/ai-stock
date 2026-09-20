@@ -29,14 +29,22 @@ def run_profile(context: dict, profile_code: str | None = None) -> dict:
             futs = {pool.submit(_invoke, e, context): e["modelCode"] for e in usable}
             for fut in as_completed(futs):
                 try:
-                    votes.append(fut.result())
+                    vote = fut.result()
+                    if _usable(vote):
+                        votes.append(vote)
                 except QuotaError as exc:
                     mark_exhausted(futs[fut], str(exc))
                 except Exception:
                     continue
         if not votes:
             votes = [analyze_quant(context)]
-    return _pack(profile, entries, votes)
+    packed = _pack(profile, entries, votes)
+    if not packed.get("cards") or not (packed.get("final") or {}).get("summary"):
+        fallback = analyze_quant(context)
+        packed["cards"] = fallback.get("cards") or []
+        if not (packed.get("final") or {}).get("summary"):
+            packed["final"] = {**(packed.get("final") or {}), "action": fallback.get("action"), "summary": fallback.get("summary")}
+    return packed
 
 
 def _invoke_or_fallback(entries: list[dict], profile: dict, context: dict) -> dict:
@@ -48,7 +56,10 @@ def _invoke_or_fallback(entries: list[dict], profile: dict, context: dict) -> di
             continue
         entry = next((e for e in entries if e["modelCode"] == code), {"modelCode": code, "temperature": 0.2})
         try:
-            return _invoke(entry, context)
+            vote = _invoke(entry, context)
+            if _usable(vote):
+                return vote
+            last_err = RuntimeError(f"{code} 返回空结论")
         except QuotaError as exc:
             mark_exhausted(code, str(exc))
             last_err = exc
@@ -59,6 +70,15 @@ def _invoke_or_fallback(entries: list[dict], profile: dict, context: dict) -> di
     if last_err:
         return analyze_quant(context)
     return analyze_quant(context)
+
+
+def _usable(vote: dict | None) -> bool:
+    if not vote:
+        return False
+    summary = str(vote.get("summary") or "").strip()
+    if summary in ("", "{}", "模型未返回结构化结论"):
+        return bool(vote.get("cards"))
+    return True
 
 
 def _invoke(entry: dict, context: dict) -> dict:
@@ -87,6 +107,7 @@ def _pack(profile: dict, entries: list[dict], votes: list[dict]) -> dict:
     primary = max(votes, key=lambda x: weight.get(x.get("modelCode") or "", 1))
     return {
         "profileCode": profile["code"],
+        "profileName": profile.get("name") or profile["code"],
         "mode": profile.get("mode"),
         "usedModels": [v.get("modelCode") for v in votes],
         "votes": [{"modelCode": v.get("modelCode"), "direction": v.get("direction"), "score": v.get("score"), "risk": v.get("risk")} for v in votes],

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from llm.router import run_profile
-from quant.algorithms.registry import run_all
+from quant.algorithms.registry import REGISTRY, run_all
 from quant.indicators import compute_snapshot
 from quant.screening.engine import build_rps_maps, rps_of
 from quant.screening.market import fetch_klines, fetch_market_returns, fetch_quote
@@ -33,7 +33,14 @@ def analyze_stock(symbol: str, profile_code: str | None = None) -> dict:
         "indicators": {k: indicators.get(k) for k in ("ma5", "ma10", "ma20", "bias5", "rsi6", "bullAlign", "aboveMa5", "ma5Rising", "macdGolden", "hist")},
         "rps": ctx["rps"],
         "algorithmHits": [
-            {"algorithmCode": h["algorithmCode"], "pass": h["pass"], "score": h["score"], "reason": h["reason"]}
+            {
+                "algorithmCode": h["algorithmCode"],
+                "short": REGISTRY[h["algorithmCode"]].short if h["algorithmCode"] in REGISTRY else h["algorithmCode"],
+                "name": REGISTRY[h["algorithmCode"]].name if h["algorithmCode"] in REGISTRY else h["algorithmCode"],
+                "pass": h["pass"],
+                "score": h["score"],
+                "reason": h["reason"],
+            }
             for h in hits
         ],
     }

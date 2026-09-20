@@ -139,13 +139,14 @@ export interface StockAnalysis {
   symbol: string
   name: string
   profileCode: string
+  profileName?: string
   mode: string
   usedModels: string[]
   votes: { modelCode: string; direction: string; score: number; risk: string }[]
   final: { direction: string; score: number; risk: string; action: string; summary: string }
   cards: AnalysisCard[]
   summaries: { modelCode: string; summary: string }[]
-  algorithmHits: { algorithmCode: string; pass: boolean; score: number; reason: string }[]
+  algorithmHits: { algorithmCode: string; short?: string; name?: string; pass: boolean; score: number; reason: string }[]
 }
 
 export interface HotNews {

@@ -33,7 +33,7 @@ def analyze_quant(context: dict) -> dict:
         action = "观望"
 
     risk = "high" if (bias5 is not None and bias5 > 8) or change <= -7 else "mid" if score < 55 else "low"
-    names = "、".join(h.get("algorithmCode") for h in hits) or "未命中五套算法"
+    names = "、".join(h.get("short") or h.get("name") or h.get("algorithmCode") for h in hits) or "未命中五套算法"
     summary = (
         f"{stock.get('name') or stock.get('symbol')} 现价 {stock.get('price')}，"
         f"涨跌 {change:.2f}%。量化命中：{names}。"
@@ -56,8 +56,8 @@ def analyze_quant(context: dict) -> dict:
             "cardType": "algorithm",
             "title": "算法命中",
             "score": score,
-            "items": [{"name": h.get("algorithmCode"), "value": h.get("reason") or "命中"} for h in hits]
-            or [{"name": "none", "value": "今日五套算法均未命中"}],
+            "items": [{"name": h.get("short") or h.get("name") or h.get("algorithmCode"), "value": h.get("reason") or "命中"} for h in hits]
+            or [{"name": "算法", "value": "今日五套算法均未命中"}],
         },
         {
             "cardType": "risk",

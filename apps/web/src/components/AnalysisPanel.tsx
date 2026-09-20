@@ -4,6 +4,26 @@ import type { AnalysisProfile, StockAnalysis } from '@ai-stock/types'
 import { loadAnalysis, PROFILE_KEY, saveAnalysis } from '../lib/cache'
 
 const DIR: Record<string, string> = { bullish: '偏多', bearish: '偏空', neutral: '中性' }
+const RISK: Record<string, string> = { low: '偏低', mid: '中性', high: '偏高' }
+const ALGO: Record<string, string> = {
+  year_high: '年新高',
+  deep_rebound: '深调回升',
+  forward_train: '火车轨',
+  daily_observe: '每日观察',
+  ma5_align: '五日线',
+}
+const MODEL: Record<string, string> = {
+  'quant-rules': '量化规则',
+  'agents-a1-free': 'Agents A1',
+  'intern-s2-free': 'Intern S2',
+  'deepseek-chat': 'DeepSeek',
+  'qwen-plus': '通义千问',
+}
+const PROFILE: Record<string, string> = {
+  stock_analysis_fast: '快速',
+  stock_analysis_default: 'AIHubMix 回退',
+  stock_analysis_ensemble: '多模型综合',
+}
 
 export default function AnalysisPanel({ symbol }: { symbol: string }) {
   const [profiles, setProfiles] = useState<AnalysisProfile[]>([])
@@ -70,14 +90,17 @@ export default function AnalysisPanel({ symbol }: { symbol: string }) {
           </div>
           <p className="muted">{data.final.summary}</p>
           <div className="muted tiny">
-            {data.profileCode} · {data.usedModels.join(' / ') || 'quant-rules'}
+            {data.profileName || PROFILE[data.profileCode] || data.profileCode}
+            {' · '}
+            {(data.usedModels.length ? data.usedModels : ['quant-rules']).map((m) => MODEL[m] || m).join(' / ')}
+            {data.final.risk ? ` · 风险${RISK[data.final.risk] || data.final.risk}` : ''}
           </div>
           {data.algorithmHits?.length > 0 && (
             <div className="tag-row">
               {data.algorithmHits.map((h) => (
                 <span key={h.algorithmCode} className={h.pass ? 'tag-chip accent' : 'tag-chip'}>
-                  {h.algorithmCode}
-                  {h.pass ? ' 命中' : ''}
+                  {h.short || ALGO[h.algorithmCode] || h.algorithmCode}
+                  {h.pass ? ' 命中' : ' 未命中'}
                 </span>
               ))}
             </div>
@@ -86,14 +109,14 @@ export default function AnalysisPanel({ symbol }: { symbol: string }) {
             <div className="metrics">
               {data.votes.map((v) => (
                 <div className="metric" key={v.modelCode}>
-                  <span>{v.modelCode}</span>
+                  <span>{MODEL[v.modelCode] || v.modelCode}</span>
                   {DIR[v.direction]} · {v.score}
                 </div>
               ))}
             </div>
           )}
           <div className="cards">
-            {data.cards.map((c) => (
+            {(data.cards || []).map((c) => (
               <article className="card" key={c.cardType + c.title}>
                 <h3>
                   {c.title} <span className="muted">{c.score}</span>
