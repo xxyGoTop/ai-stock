@@ -1,5 +1,6 @@
 import type { Conversation } from '../lib/chatSession'
 import { dayLabel } from '../lib/chatSession'
+import { IconPanelLeftCollapse, IconPanelLeftExpand, IconPlus } from './LayoutIcons'
 
 type Props = {
   conversations: Conversation[]
@@ -24,12 +25,12 @@ export default function SessionSidebar({
 
   if (collapsed) {
     return (
-      <aside className="session-sidebar panel collapsed" title="会话栏已收起">
+      <aside className="session-sidebar panel collapsed" aria-label="会话栏已收起">
         <button type="button" className="side-rail-btn" onClick={onToggleCollapse} title="展开会话栏">
-          ≫
+          <IconPanelLeftExpand />
         </button>
         <button type="button" className="side-rail-btn" onClick={onCreate} title="新建会话">
-          +
+          <IconPlus />
         </button>
       </aside>
     )
@@ -40,11 +41,11 @@ export default function SessionSidebar({
       <div className="session-side-head">
         <strong>会话</strong>
         <div className="session-side-actions">
-          <button type="button" className="ghost-btn" onClick={onCreate}>
-            + 新建
+          <button type="button" className="icon-btn" onClick={onCreate} title="新建会话">
+            <IconPlus />
           </button>
-          <button type="button" className="ghost-btn side-collapse-btn" onClick={onToggleCollapse} title="收起会话栏">
-            ≪
+          <button type="button" className="icon-btn" onClick={onToggleCollapse} title="收起会话栏">
+            <IconPanelLeftCollapse />
           </button>
         </div>
       </div>

@@ -20,6 +20,15 @@ import type {
 } from '@ai-stock/types'
 import ChatBlocks from '../components/ChatBlocks'
 import KlineChart from '../components/KlineChart'
+import {
+  IconFullscreen,
+  IconFullscreenExit,
+  IconGrow,
+  IconPanelLeftExpand,
+  IconPanelRightCollapse,
+  IconPanelRightExpand,
+  IconShrink,
+} from '../components/LayoutIcons'
 import PaperTicket from '../components/PaperTicket'
 import ResearchProgress, { AgentStatusBar, type ToolLine } from '../components/ResearchProgress'
 import SessionSidebar from '../components/SessionSidebar'
@@ -52,20 +61,26 @@ const WS_MIN = 280
 const WS_MAX = 720
 const WS_DEFAULT = 420
 
-type LayoutPrefs = { sideCollapsed: boolean; wsWidth: number; wsCollapsed: boolean }
+type LayoutPrefs = {
+  sideCollapsed: boolean
+  wsWidth: number
+  wsCollapsed: boolean
+  fullscreen: boolean
+}
 
 function loadLayout(): LayoutPrefs {
   try {
     const raw = localStorage.getItem(LAYOUT_KEY)
-    if (!raw) return { sideCollapsed: false, wsWidth: WS_DEFAULT, wsCollapsed: false }
+    if (!raw) return { sideCollapsed: false, wsWidth: WS_DEFAULT, wsCollapsed: false, fullscreen: false }
     const p = JSON.parse(raw) as Partial<LayoutPrefs>
     return {
       sideCollapsed: !!p.sideCollapsed,
       wsCollapsed: !!p.wsCollapsed,
+      fullscreen: !!p.fullscreen,
       wsWidth: Math.min(WS_MAX, Math.max(WS_MIN, Number(p.wsWidth) || WS_DEFAULT)),
     }
   } catch {
-    return { sideCollapsed: false, wsWidth: WS_DEFAULT, wsCollapsed: false }
+    return { sideCollapsed: false, wsWidth: WS_DEFAULT, wsCollapsed: false, fullscreen: false }
   }
 }
 
@@ -116,6 +131,7 @@ export default function Chat() {
   const [sideCollapsed, setSideCollapsed] = useState(layoutInit.sideCollapsed)
   const [wsCollapsed, setWsCollapsed] = useState(layoutInit.wsCollapsed)
   const [wsWidth, setWsWidth] = useState(layoutInit.wsWidth)
+  const [fullscreen, setFullscreen] = useState(layoutInit.fullscreen)
   const dragRef = useRef<{ startX: number; startW: number } | null>(null)
 
   function refreshList() {
@@ -540,8 +556,22 @@ export default function Chat() {
   const tab = workspace.tab || 'overview'
 
   useEffect(() => {
-    saveLayout({ sideCollapsed, wsWidth, wsCollapsed })
-  }, [sideCollapsed, wsWidth, wsCollapsed])
+    saveLayout({ sideCollapsed, wsWidth, wsCollapsed, fullscreen })
+  }, [sideCollapsed, wsWidth, wsCollapsed, fullscreen])
+
+  useEffect(() => {
+    document.body.classList.toggle('layout-fullscreen', fullscreen)
+    return () => document.body.classList.remove('layout-fullscreen')
+  }, [fullscreen])
+
+  useEffect(() => {
+    if (!fullscreen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFullscreen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [fullscreen])
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -618,15 +648,33 @@ export default function Chat() {
           </div>
           <div className="head-actions">
             {sideCollapsed && (
-              <button type="button" className="ghost-btn" onClick={() => setSideCollapsed(false)} title="展开会话栏">
-                会话
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setSideCollapsed(false)}
+                title="展开会话栏"
+              >
+                <IconPanelLeftExpand />
               </button>
             )}
             {wsCollapsed && (
-              <button type="button" className="ghost-btn" onClick={() => setWsCollapsed(false)} title="展开工作台">
-                工作台
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setWsCollapsed(false)}
+                title="展开工作台"
+              >
+                <IconPanelRightExpand />
               </button>
             )}
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => setFullscreen((v) => !v)}
+              title={fullscreen ? '退出全屏 (Esc)' : '全屏'}
+            >
+              {fullscreen ? <IconFullscreenExit /> : <IconFullscreen />}
+            </button>
             <button type="button" className="ghost-btn" disabled={loading} onClick={onCreateSession}>
               新会话
             </button>
@@ -717,12 +765,19 @@ export default function Chat() {
         {wsCollapsed ? (
           <div className="ws-rail">
             <button type="button" className="side-rail-btn" onClick={() => setWsCollapsed(false)} title="展开工作台">
-              ≪
+              <IconPanelRightExpand />
             </button>
             <button type="button" className="side-rail-btn" onClick={growWs} title="放大工作台">
-              +
+              <IconGrow />
             </button>
-            <span className="ws-rail-label">台</span>
+            <button
+              type="button"
+              className="side-rail-btn"
+              onClick={() => setFullscreen((v) => !v)}
+              title={fullscreen ? '退出全屏' : '全屏'}
+            >
+              {fullscreen ? <IconFullscreenExit /> : <IconFullscreen />}
+            </button>
           </div>
         ) : (
           <>
@@ -744,14 +799,27 @@ export default function Chat() {
               </div>
               <div className="workspace-head-actions">
                 <div className="ws-size-controls">
-                  <button type="button" className="ghost-btn" onClick={shrinkWs} title="缩小工作台">
-                    −
+                  <button type="button" className="icon-btn" onClick={shrinkWs} title="缩小工作台">
+                    <IconShrink />
                   </button>
-                  <button type="button" className="ghost-btn" onClick={growWs} title="放大工作台">
-                    +
+                  <button type="button" className="icon-btn" onClick={growWs} title="放大工作台">
+                    <IconGrow />
                   </button>
-                  <button type="button" className="ghost-btn" onClick={() => setWsCollapsed(true)} title="收起工作台">
-                    ≫
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => setFullscreen((v) => !v)}
+                    title={fullscreen ? '退出全屏 (Esc)' : '全屏'}
+                  >
+                    {fullscreen ? <IconFullscreenExit /> : <IconFullscreen />}
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => setWsCollapsed(true)}
+                    title="收起工作台"
+                  >
+                    <IconPanelRightCollapse />
                   </button>
                 </div>
                 {workspace.type === 'stock' && workspace.symbol && (
