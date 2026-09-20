@@ -1,28 +1,56 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getPaperAccount } from '@ai-stock/api-client'
+import { getPaperAccount, resetPaperAccount } from '@ai-stock/api-client'
 import { changeTone, formatChange } from '@ai-stock/business'
 import type { PaperAccount } from '@ai-stock/types'
+import { notifyPaperUpdated, PAPER_EVENT } from '../lib/paper'
 
 export default function Paper() {
   const [acc, setAcc] = useState<PaperAccount | null>(null)
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    getPaperAccount()
-      .then(setAcc)
-      .catch((err) => setError(err instanceof Error ? err.message : '账户加载失败'))
+    const load = () => {
+      getPaperAccount()
+        .then(setAcc)
+        .catch((err) => setError(err instanceof Error ? err.message : '账户加载失败'))
+    }
+    load()
+    window.addEventListener(PAPER_EVENT, load)
+    return () => window.removeEventListener(PAPER_EVENT, load)
   }, [])
 
-  if (error) return <p className="warn">{error}</p>
+  async function reset() {
+    if (!window.confirm('清空持仓和成交，资金回到 100 万？')) return
+    setBusy(true)
+    try {
+      const next = await resetPaperAccount()
+      setAcc(next)
+      notifyPaperUpdated()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '重置失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (error && !acc) return <p className="warn">{error}</p>
   if (!acc) return <p className="muted">加载模拟账户…</p>
 
   return (
     <main>
       <section className="panel">
-        <h2 className="section-title">模拟账户</h2>
-        <p className="muted tight">初始 100 万，限价成交，买入当日 T+1 可卖。手续费万 2.5，卖出另加印花税 0.1%。</p>
-        <div className="metrics">
+        <div className="header-line wrap">
+          <div>
+            <h2 className="section-title">模拟账户</h2>
+            <p className="muted tight">初始 100 万，限价成交，买入当日 T+1 可卖。手续费万 2.5，卖出另加印花税 0.1%。</p>
+          </div>
+          <button className="ghost" disabled={busy} onClick={reset}>
+            重置账户
+          </button>
+        </div>
+        <div className="metrics five">
           <div className="metric">
             <span>总资产</span>
             {acc.equity.toFixed(2)}
@@ -36,14 +64,22 @@ export default function Paper() {
             {acc.marketValue.toFixed(2)}
           </div>
           <div className="metric">
+            <span>今日盈亏</span>
+            <b className={changeTone(acc.todayPnl || 0)}>
+              {(acc.todayPnl || 0).toFixed(2)} {formatChange(acc.todayPnlPct || 0)}
+            </b>
+          </div>
+          <div className="metric">
             <span>累计盈亏</span>
-            <b className={changeTone(acc.pnl)}>{acc.pnl.toFixed(2)} {formatChange(acc.pnlPct)}</b>
+            <b className={changeTone(acc.pnl)}>
+              {acc.pnl.toFixed(2)} {formatChange(acc.pnlPct)}
+            </b>
           </div>
         </div>
       </section>
       <section className="panel" style={{ marginTop: 16 }}>
         <h3 className="section-title">持仓</h3>
-        {acc.positions.length === 0 && <p className="muted">暂无持仓，去个股详情页模拟买入。</p>}
+        {acc.positions.length === 0 && <p className="muted">暂无持仓，去个股详情页按交易计划确认后模拟买入。</p>}
         <div className="results">
           {acc.positions.map((p) => (
             <Link className="row" key={p.symbol} to={`/stock/${p.symbol}`}>

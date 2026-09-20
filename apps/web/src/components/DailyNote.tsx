@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getDailyNote } from '@ai-stock/api-client'
 import type { DailyNote as Note } from '@ai-stock/types'
+import TradingPlan from './TradingPlan'
 
 const ACTION: Record<string, string> = {
   buy: '可买入',
@@ -130,6 +131,7 @@ export default function DailyNote({ symbol }: { symbol: string }) {
         </div>
       </div>
       <p className="muted">{p.note}</p>
+      <TradingPlan note={note} />
       {v ? (
         <div className="sv">
           <div className="sv-h">指标研判 · 综合强弱</div>

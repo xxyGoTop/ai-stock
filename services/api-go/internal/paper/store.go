@@ -12,13 +12,17 @@ import (
 const startCash = 1_000_000.0
 
 type Account struct {
-	Cash      float64    `json:"cash"`
-	MarketValue float64  `json:"marketValue"`
-	Equity    float64    `json:"equity"`
-	PnL       float64    `json:"pnl"`
-	PnLPct    float64    `json:"pnlPct"`
-	Positions []Position `json:"positions"`
-	Orders    []Order    `json:"orders"`
+	Cash        float64    `json:"cash"`
+	MarketValue float64    `json:"marketValue"`
+	Equity      float64    `json:"equity"`
+	PnL         float64    `json:"pnl"`
+	PnLPct      float64    `json:"pnlPct"`
+	TodayPnL    float64    `json:"todayPnl"`
+	TodayPnLPct float64    `json:"todayPnlPct"`
+	DayMark     string     `json:"dayMark,omitempty"`
+	DayEquity   float64    `json:"dayEquity,omitempty"`
+	Positions   []Position `json:"positions"`
+	Orders      []Order    `json:"orders"`
 }
 
 type Position struct {
@@ -71,9 +75,24 @@ func (s *Store) Snapshot(quotes map[string]float64) (*Account, error) {
 	if err != nil {
 		return nil, err
 	}
-	today := time.Now().In(time.FixedZone("CST", 8*3600)).Format("2006-01-02")
+	today := cstToday()
+	rolled := acc.DayMark != today
 	s.releaseT1(acc, today)
-	s.mark(acc, quotes)
+	s.mark(acc, quotes, today)
+	if rolled {
+		_ = s.save(acc)
+	}
+	return acc, nil
+}
+
+func (s *Store) Reset() (*Account, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	today := cstToday()
+	acc := &Account{Cash: startCash, Equity: startCash, DayMark: today, DayEquity: startCash, Positions: []Position{}, Orders: []Order{}}
+	if err := s.save(acc); err != nil {
+		return nil, err
+	}
 	return acc, nil
 }
 
@@ -146,7 +165,7 @@ func (s *Store) Place(req PlaceReq, lastPrice float64) (*Account, error) {
 		acc.Orders = acc.Orders[:80]
 	}
 	s.releaseT1(acc, now.Format("2006-01-02"))
-	s.mark(acc, map[string]float64{req.Symbol: req.Price})
+	s.mark(acc, map[string]float64{req.Symbol: req.Price}, now.Format("2006-01-02"))
 	if err := s.save(acc); err != nil {
 		return nil, err
 	}
@@ -182,7 +201,7 @@ func (s *Store) save(acc *Account) error {
 	return os.WriteFile(s.path, raw, 0o644)
 }
 
-func (s *Store) mark(acc *Account, quotes map[string]float64) {
+func (s *Store) mark(acc *Account, quotes map[string]float64, today string) {
 	mv := 0.0
 	for i := range acc.Positions {
 		p := &acc.Positions[i]
@@ -200,6 +219,19 @@ func (s *Store) mark(acc *Account, quotes map[string]float64) {
 	acc.Equity = acc.Cash + mv
 	acc.PnL = acc.Equity - startCash
 	acc.PnLPct = acc.PnL / startCash * 100
+	if acc.DayMark != today {
+		acc.DayMark = today
+		acc.DayEquity = acc.Equity
+	}
+	if acc.DayEquity <= 0 {
+		acc.DayEquity = startCash
+	}
+	acc.TodayPnL = acc.Equity - acc.DayEquity
+	acc.TodayPnLPct = acc.TodayPnL / acc.DayEquity * 100
+}
+
+func cstToday() string {
+	return time.Now().In(time.FixedZone("CST", 8*3600)).Format("2006-01-02")
 }
 
 func (s *Store) releaseT1(acc *Account, today string) {

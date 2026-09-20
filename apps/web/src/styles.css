@@ -231,6 +231,10 @@ a {
   margin: 16px 0;
 }
 
+.metrics.five {
+  grid-template-columns: repeat(5, 1fr);
+}
+
 .metric {
   background: #0d1526;
   border-radius: 10px;
@@ -729,6 +733,80 @@ a {
   padding: 10px 12px;
 }
 
+.trade-plan {
+  margin: 12px 0 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #0d1526;
+  border: 1px solid #3f2a16;
+}
+
+.plan-meta {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 0.8fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.plan-meta span,
+.invalid > span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.plan-meta b {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+}
+
+.plan-meta em {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.invalid ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: #f3e0b8;
+  font-size: 13px;
+}
+
+.disclaimer {
+  margin: 10px 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.confirm-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 10, 18, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.confirm-box {
+  width: min(480px, 92vw);
+  background: #161e31;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px 18px 14px;
+}
+
+.confirm-box h3 {
+  margin: 0 0 10px;
+}
+
+.warn.tight,
+.muted.tight {
+  margin-top: 8px;
+}
+
 .buy-btn {
   background: #ef4444;
   color: #fff;
@@ -750,7 +828,9 @@ a {
   .split,
   .plan-grid,
   .note-cols,
-  .sv-split {
+  .sv-split,
+  .plan-meta,
+  .metrics.five {
     grid-template-columns: 1fr;
   }
 

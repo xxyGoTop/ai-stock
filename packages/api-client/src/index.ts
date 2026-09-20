@@ -90,6 +90,10 @@ export function placePaperOrder(body: { symbol: string; name?: string; side: 'bu
   return post<PaperAccount>('/paper/orders', body)
 }
 
+export function resetPaperAccount() {
+  return post<PaperAccount>('/paper/reset', {})
+}
+
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',

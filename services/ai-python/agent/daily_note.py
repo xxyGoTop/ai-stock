@@ -22,7 +22,7 @@ def daily_note(symbol: str, force: bool = False) -> dict:
     symbol = "".join(ch for ch in str(symbol) if ch.isdigit()).zfill(6)
     as_of = _trade_date()
     cached = None if force else _load(as_of, symbol)
-    if cached and cached.get("verdict"):
+    if cached and cached.get("verdict") and (cached.get("plan") or {}).get("position") is not None:
         cached["cached"] = True
         return cached
     note = _build(symbol, as_of)
@@ -75,6 +75,7 @@ def _build(symbol: str, as_of: str) -> dict:
     stance = _base_stance(bases.get("baseCount") or 0)
     plan = _entry_plan(ctx["stock"]["price"], indicators, primary or "ma5_align")
     action = _action(score, plan, ctx["stock"]["changePercent"])
+    plan.update(_trade_meta(score, action, plan, indicators, ctx["stock"]))
     reasons = [f"【{NAME.get(h['algorithmCode'], h['algorithmCode'])}】{h.get('reason')}" for h in passed] or [
         "今日五套算法均未命中，仅作观察。"
     ]
@@ -192,6 +193,38 @@ def _normalize(price, zone_low, zone_high, structural, t1, t2):
         "target1": _r(target1),
         "target2": _r(target2),
         "stance": stance,
+    }
+
+
+def _trade_meta(score: float, action: dict, plan: dict, ind: dict, stock: dict) -> dict:
+    level = action.get("level") or "watch"
+    if level == "buy":
+        pos, risk, direction = (0.2 if score >= 40 else 0.15), "medium", "buy"
+    elif level == "wait":
+        pos, risk, direction = 0.1, "medium", "watch"
+    else:
+        pos, risk, direction = 0.05, "high", "watch"
+    price = float(stock.get("price") or plan.get("buyHigh") or 0)
+    qty = 0
+    if price > 0:
+        qty = int(1_000_000 * pos / price / 100) * 100
+        if pos >= 0.1:
+            qty = max(100, qty)
+    invalid = [f"跌破止损 {plan['stop']:.2f}"]
+    if ind.get("ma20"):
+        invalid.append(f"跌破20日线 {float(ind['ma20']):.2f}")
+    if plan.get("stance") == "above":
+        invalid.append("现价未回踩买入区间，追高失效")
+    elif plan.get("stance") == "below":
+        invalid.append("现价未站回买入区间")
+    if (ind.get("rsi14") or 0) > 70:
+        invalid.append("RSI14 维持超买且拐头向下")
+    return {
+        "direction": direction,
+        "position": pos,
+        "suggestedQty": qty,
+        "riskLevel": risk,
+        "invalidConditions": invalid[:4],
     }
 
 

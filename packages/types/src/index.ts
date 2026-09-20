@@ -206,6 +206,11 @@ export interface DailyNote {
     stance: string
     entryType: string
     note: string
+    direction?: 'buy' | 'watch' | string
+    position?: number
+    suggestedQty?: number
+    riskLevel?: 'low' | 'medium' | 'high' | string
+    invalidConditions?: string[]
   }
   reasons: string[]
   risks: string[]
@@ -270,6 +275,8 @@ export interface PaperAccount {
   equity: number
   pnl: number
   pnlPct: number
+  todayPnl?: number
+  todayPnlPct?: number
   positions: PaperPosition[]
   orders: PaperOrder[]
 }

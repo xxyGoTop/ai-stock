@@ -49,6 +49,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/hot", s.hot)
 	mux.HandleFunc("/api/v1/paper/account", s.paperAccount)
 	mux.HandleFunc("/api/v1/paper/orders", s.paperOrders)
+	mux.HandleFunc("/api/v1/paper/positions", s.paperPositions)
+	mux.HandleFunc("/api/v1/paper/reset", s.paperReset)
 	return s.cors(mux)
 }
 
@@ -242,12 +244,12 @@ func (s *Server) dailyNote(w http.ResponseWriter, r *http.Request) {
 	s.writeRaw(w, raw)
 }
 
-func (s *Server) paperAccount(w http.ResponseWriter, r *http.Request) {
+func (s *Server) loadPaper(w http.ResponseWriter) *paper.Account {
 	quotes := map[string]float64{}
 	acc, err := s.paper.Snapshot(quotes)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, err.Error())
-		return
+		return nil
 	}
 	names := map[string]string{}
 	for i := range acc.Positions {
@@ -259,19 +261,53 @@ func (s *Server) paperAccount(w http.ResponseWriter, r *http.Request) {
 	acc, err = s.paper.Snapshot(quotes)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, err.Error())
-		return
+		return nil
 	}
 	for i := range acc.Positions {
 		if n := names[acc.Positions[i].Symbol]; n != "" {
 			acc.Positions[i].Name = n
 		}
 	}
+	return acc
+}
+
+func (s *Server) paperAccount(w http.ResponseWriter, r *http.Request) {
+	acc := s.loadPaper(w)
+	if acc != nil {
+		response.OK(w, acc)
+	}
+}
+
+func (s *Server) paperPositions(w http.ResponseWriter, r *http.Request) {
+	acc := s.loadPaper(w)
+	if acc != nil {
+		response.OK(w, acc.Positions)
+	}
+}
+
+func (s *Server) paperReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		response.Error(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	acc, err := s.paper.Reset()
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	response.OK(w, acc)
 }
 
 func (s *Server) paperOrders(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		acc := s.loadPaper(w)
+		if acc != nil {
+			response.OK(w, acc.Orders)
+		}
+		return
+	}
 	if r.Method != http.MethodPost {
-		response.Error(w, http.StatusMethodNotAllowed, "POST only")
+		response.Error(w, http.StatusMethodNotAllowed, "GET or POST")
 		return
 	}
 	var req paper.PlaceReq
