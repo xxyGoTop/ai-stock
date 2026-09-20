@@ -46,9 +46,12 @@ Python 依赖：`pip install -r services/ai-python/requirements.txt -i https://p
 可选大模型密钥（不配也能用内置 `quant-rules`）：
 
 ```
+LLM_AIHUBMIX_KEY   # 或 AIHUBMIX_API_KEY，https://aihubmix.com
 LLM_DEEPSEEK_KEY
 LLM_QWEN_KEY
 ```
+
+AIHubMix 默认回退链：`agents-a1-free` → `intern-s2-free` → DeepSeek / Qwen → 量化规则。某个模型额度用尽（429/限流）后会自动跳过约 6 小时。
 
 ## 仓库结构
 

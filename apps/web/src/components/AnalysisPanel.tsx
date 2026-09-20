@@ -7,7 +7,7 @@ const DIR: Record<string, string> = { bullish: '偏多', bearish: '偏空', neut
 
 export default function AnalysisPanel({ symbol }: { symbol: string }) {
   const [profiles, setProfiles] = useState<AnalysisProfile[]>([])
-  const [profile, setProfile] = useState(localStorage.getItem(PROFILE_KEY) || 'stock_analysis_fast')
+  const [profile, setProfile] = useState(localStorage.getItem(PROFILE_KEY) || 'stock_analysis_default')
   const [data, setData] = useState<StockAnalysis | null>(() => loadAnalysis(symbol))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')

@@ -8,6 +8,13 @@
       "enabled": true
     },
     {
+      "code": "aihubmix",
+      "kind": "openai_compatible",
+      "baseUrl": "https://aihubmix.com/v1",
+      "apiKeyRef": "env:LLM_AIHUBMIX_KEY|AIHUBMIX_API_KEY",
+      "enabled": true
+    },
+    {
       "code": "deepseek",
       "kind": "openai_compatible",
       "baseUrl": "https://api.deepseek.com",
@@ -31,6 +38,29 @@
       "maxTokens": 2048,
       "timeoutMs": 5000,
       "costTier": "free",
+      "jsonMode": false,
+      "enabled": true
+    },
+    {
+      "code": "agents-a1-free",
+      "providerCode": "aihubmix",
+      "modelName": "agents-a1-free",
+      "roles": ["analyst", "screener", "planner", "judge"],
+      "maxTokens": 2048,
+      "timeoutMs": 90000,
+      "costTier": "free",
+      "jsonMode": false,
+      "enabled": true
+    },
+    {
+      "code": "intern-s2-free",
+      "providerCode": "aihubmix",
+      "modelName": "intern-s2-free",
+      "roles": ["analyst", "judge"],
+      "maxTokens": 2048,
+      "timeoutMs": 90000,
+      "costTier": "free",
+      "jsonMode": false,
       "enabled": true
     },
     {
@@ -61,20 +91,22 @@
       "task": "stock_analysis",
       "mode": "single",
       "models": [{ "modelCode": "quant-rules", "weight": 1, "temperature": 0 }],
-      "fallback": [],
+      "fallback": ["quant-rules"],
       "enabled": true
     },
     {
       "code": "stock_analysis_default",
-      "name": "默认回退",
+      "name": "AIHubMix 回退",
       "task": "stock_analysis",
       "mode": "fallback",
       "models": [
+        { "modelCode": "agents-a1-free", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "intern-s2-free", "weight": 1, "temperature": 0.2 },
         { "modelCode": "deepseek-chat", "weight": 1, "temperature": 0.2 },
         { "modelCode": "qwen-plus", "weight": 1, "temperature": 0.2 },
         { "modelCode": "quant-rules", "weight": 1, "temperature": 0 }
       ],
-      "fallback": ["deepseek-chat", "qwen-plus", "quant-rules"],
+      "fallback": ["agents-a1-free", "intern-s2-free", "deepseek-chat", "qwen-plus", "quant-rules"],
       "enabled": true
     },
     {
@@ -83,9 +115,9 @@
       "task": "stock_analysis",
       "mode": "ensemble",
       "models": [
-        { "modelCode": "quant-rules", "weight": 0.3, "temperature": 0 },
-        { "modelCode": "deepseek-chat", "weight": 0.4, "temperature": 0.2 },
-        { "modelCode": "qwen-plus", "weight": 0.3, "temperature": 0.2 }
+        { "modelCode": "quant-rules", "weight": 0.2, "temperature": 0 },
+        { "modelCode": "agents-a1-free", "weight": 0.4, "temperature": 0.2 },
+        { "modelCode": "intern-s2-free", "weight": 0.4, "temperature": 0.2 }
       ],
       "fallback": ["quant-rules"],
       "judgeModelCode": "quant-rules",

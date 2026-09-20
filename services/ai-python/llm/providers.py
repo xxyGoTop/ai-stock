@@ -6,7 +6,7 @@ import urllib.request
 
 from .config import get_provider, resolve_key
 from .quant_analyst import analyze_quant
-
+from .quota import QuotaError, is_quota_error
 
 SYSTEM = """你是A股投研助手。只根据给定的量化上下文做解释，不要自己编造指标数字。
 必须返回 JSON，字段：
@@ -33,12 +33,13 @@ def call_model(model: dict, context: dict, temperature: float = 0.2) -> dict:
         "model": model["modelName"],
         "temperature": temperature,
         "max_tokens": min(int(model.get("maxTokens") or 1024), 2048),
-        "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": json.dumps(context, ensure_ascii=False)[:8000]},
         ],
     }
+    if model.get("jsonMode", True):
+        payload["response_format"] = {"type": "json_object"}
     url = (provider.get("baseUrl") or "").rstrip("/") + "/chat/completions"
     req = urllib.request.Request(
         url,
@@ -54,7 +55,11 @@ def call_model(model: dict, context: dict, temperature: float = 0.2) -> dict:
         with urllib.request.urlopen(req, timeout=timeout) as res:
             body = json.loads(res.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"{model['code']} HTTP {exc.code}") from exc
+        detail = exc.read().decode("utf-8", "ignore")[:400]
+        err = RuntimeError(f"{model['code']} HTTP {exc.code} {detail}")
+        if is_quota_error(err) or exc.code in (402, 429):
+            raise QuotaError(str(err)) from exc
+        raise err from exc
     text = (((body.get("choices") or [{}])[0].get("message") or {}).get("content")) or "{}"
     parsed = _parse_json(text)
     parsed["modelCode"] = model["code"]
@@ -62,12 +67,19 @@ def call_model(model: dict, context: dict, temperature: float = 0.2) -> dict:
 
 
 def _parse_json(text: str) -> dict:
-    text = text.strip()
+    text = (text or "").strip()
     if text.startswith("```"):
         text = text.strip("`")
         if text.startswith("json"):
             text = text[4:]
-    data = json.loads(text)
+    if not text.startswith("{"):
+        start, end = text.find("{"), text.rfind("}")
+        if start >= 0 and end > start:
+            text = text[start : end + 1]
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        data = {}
     direction = data.get("direction") if data.get("direction") in ("bullish", "neutral", "bearish") else "neutral"
     try:
         score = int(data.get("score"))
@@ -78,6 +90,6 @@ def _parse_json(text: str) -> dict:
         "score": max(0, min(100, score)),
         "risk": data.get("risk") if data.get("risk") in ("low", "mid", "high") else "mid",
         "action": str(data.get("action") or "观望")[:40],
-        "summary": str(data.get("summary") or "")[:200],
+        "summary": str(data.get("summary") or text[:180] or "模型未返回结构化结论")[:200],
         "cards": data.get("cards") if isinstance(data.get("cards"), list) else [],
     }

@@ -5,7 +5,30 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+from .quota import status as quota_status
+
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "llm.json"
+
+
+def load_dotenv() -> None:
+    roots = [
+        Path(__file__).resolve().parents[3] / ".env",
+        Path(__file__).resolve().parents[1] / ".env",
+    ]
+    for path in roots:
+        if not path.exists():
+            continue
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key, value = key.strip(), value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
+load_dotenv()
 
 
 @lru_cache(maxsize=1)
@@ -17,7 +40,10 @@ def resolve_key(ref: str) -> str:
     if not ref:
         return ""
     if ref.startswith("env:"):
-        return os.environ.get(ref[4:], "").strip()
+        for name in ref[4:].split("|"):
+            val = os.environ.get(name.strip(), "").strip()
+            if val:
+                return val
     return ""
 
 
@@ -50,6 +76,12 @@ def get_profile(code: str | None) -> dict:
     return next((p for p in items if p["code"] == "stock_analysis_default"), items[0])
 
 
+def model_callable(model: dict) -> bool:
+    from .quota import is_exhausted
+
+    return model_ready(model) and not is_exhausted(model["code"])
+
+
 def model_ready(model: dict) -> bool:
     if not model.get("enabled", True):
         return False
@@ -74,6 +106,7 @@ def list_models() -> list[dict]:
                 "costTier": m.get("costTier"),
                 "enabled": bool(m.get("enabled", True) and provider.get("enabled", True)),
                 "ready": model_ready(m),
+                **quota_status(m["code"]),
             }
         )
     return out

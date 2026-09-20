@@ -122,6 +122,9 @@ export interface LlmModel {
   costTier: string
   enabled: boolean
   ready: boolean
+  exhausted?: boolean
+  retryInSec?: number
+  reason?: string
 }
 
 export interface AnalysisCard {

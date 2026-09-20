@@ -197,6 +197,10 @@ a {
   margin: 8px 0 16px;
 }
 
+.panel a {
+  color: var(--accent);
+}
+
 .header-line {
   display: flex;
   justify-content: space-between;
