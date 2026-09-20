@@ -177,6 +177,73 @@ export interface HotFeed {
   boards: HotBoard[]
 }
 
+export interface DailyNote {
+  type: string
+  symbol: string
+  name: string
+  industry: string
+  asOf: string
+  price: number
+  changePercent: number
+  score: number
+  primary: string
+  primaryName: string
+  strategies: { code: string; short: string; name: string; pass: boolean; score: number; reason: string }[]
+  baseLabel: string
+  baseLevel: string
+  baseCount: number
+  action: string
+  actionLevel: 'buy' | 'wait' | 'watch' | string
+  actionNote: string
+  plan: {
+    buyLow: number
+    buyHigh: number
+    stop: number
+    target1: number
+    target2: number
+    stance: string
+    entryType: string
+    note: string
+  }
+  reasons: string[]
+  risks: string[]
+  cached?: boolean
+}
+
+export interface PaperPosition {
+  symbol: string
+  name: string
+  qty: number
+  available: number
+  cost: number
+  price: number
+  marketValue: number
+  pnl: number
+}
+
+export interface PaperOrder {
+  id: string
+  symbol: string
+  name: string
+  side: 'buy' | 'sell' | string
+  price: number
+  qty: number
+  amount: number
+  fee: number
+  status: string
+  createdAt: string
+}
+
+export interface PaperAccount {
+  cash: number
+  marketValue: number
+  equity: number
+  pnl: number
+  pnlPct: number
+  positions: PaperPosition[]
+  orders: PaperOrder[]
+}
+
 export interface ApiResponse<T> {
   code: number
   message: string

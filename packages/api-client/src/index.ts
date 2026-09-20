@@ -6,7 +6,9 @@ import type {
   KlineBar,
   LlmModel,
   Quote,
+  DailyNote,
   HotFeed,
+  PaperAccount,
   ScreenResult,
   Stock,
   StockAnalysis,
@@ -74,6 +76,18 @@ export function analyzeStock(symbol: string, profileCode?: string) {
 
 export function getHotFeed(limit = 15) {
   return get<HotFeed>(`/hot?limit=${limit}`)
+}
+
+export function getDailyNote(symbol: string, force = false) {
+  return get<DailyNote>(`/ai/daily-note?symbol=${encodeURIComponent(symbol)}${force ? '&force=1' : ''}`)
+}
+
+export function getPaperAccount() {
+  return get<PaperAccount>('/paper/account')
+}
+
+export function placePaperOrder(body: { symbol: string; name?: string; side: 'buy' | 'sell'; price: number; qty: number }) {
+  return post<PaperAccount>('/paper/orders', body)
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {

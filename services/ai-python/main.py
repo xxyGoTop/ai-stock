@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from agent.daily_note import daily_note
 from agent.research import analyze_stock
 from llm.config import list_models, list_profiles
 from quant.algorithms.registry import list_algorithms
@@ -50,5 +51,13 @@ def llm_profiles():
 def analyze(req: AnalyzeRequest):
     try:
         return analyze_stock(req.symbol, req.profileCode)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/v1/ai/daily-note")
+def note(symbol: str, force: bool = False):
+    try:
+        return daily_note(symbol, force)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

@@ -31,5 +31,8 @@ venv/
 Thumbs.db
 
 output/
+data/
+services/ai-python/data/
+services/api-go/data/
 data/*.local.json
 config/*.local.json

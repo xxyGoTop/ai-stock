@@ -1,6 +1,7 @@
 import { Link, Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import Home from './pages/Home'
 import Hot from './pages/Hot'
+import Paper from './pages/Paper'
 import Screening from './pages/Screening'
 import Settings from './pages/Settings'
 import StockDetail from './pages/StockDetail'
@@ -18,6 +19,7 @@ export default function App() {
           </NavLink>
           <NavLink to="/screening">选股</NavLink>
           <NavLink to="/hot">热点</NavLink>
+          <NavLink to="/paper">模拟</NavLink>
           <NavLink to="/settings">设置</NavLink>
         </nav>
         <span className="tag">模拟盘 · 非实盘</span>
@@ -26,6 +28,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/screening" element={<Screening />} />
         <Route path="/hot" element={<Hot />} />
+        <Route path="/paper" element={<Paper />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/stock/:symbol" element={<StockDetail />} />
         <Route path="*" element={<Navigate to="/" replace />} />

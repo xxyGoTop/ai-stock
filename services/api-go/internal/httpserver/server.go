@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/indicator"
+	"github.com/xxyGoTop/ai-stock/services/api-go/internal/paper"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/provider"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/python"
 	"github.com/xxyGoTop/ai-stock/services/api-go/pkg/response"
@@ -18,6 +19,7 @@ import (
 type Server struct {
 	bundle *provider.Bundle
 	py     *python.Client
+	paper  *paper.Store
 	origin string
 }
 
@@ -26,7 +28,7 @@ func New(timeout time.Duration) *Server {
 	if origin == "" {
 		origin = "http://localhost:5273"
 	}
-	return &Server{bundle: provider.NewProviders(timeout), py: python.New(), origin: origin}
+	return &Server{bundle: provider.NewProviders(timeout), py: python.New(), paper: paper.New(), origin: origin}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -43,7 +45,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/llm/models", s.models)
 	mux.HandleFunc("/api/v1/analysis-profiles", s.profiles)
 	mux.HandleFunc("/api/v1/ai/analyze", s.analyze)
+	mux.HandleFunc("/api/v1/ai/daily-note", s.dailyNote)
 	mux.HandleFunc("/api/v1/hot", s.hot)
+	mux.HandleFunc("/api/v1/paper/account", s.paperAccount)
+	mux.HandleFunc("/api/v1/paper/orders", s.paperOrders)
 	return s.cors(mux)
 }
 
@@ -200,6 +205,95 @@ func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadGateway, "python analyze: "+err.Error())
 		return
 	}
+	var dest interface{}
+	if err := json.Unmarshal(raw, &dest); err != nil {
+		response.Error(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	response.OK(w, dest)
+}
+
+func (s *Server) dailyNote(w http.ResponseWriter, r *http.Request) {
+	symbol := strings.TrimSpace(r.URL.Query().Get("symbol"))
+	if symbol == "" && r.Method == http.MethodPost {
+		var body struct {
+			Symbol string `json:"symbol"`
+			Force  bool   `json:"force"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		symbol = body.Symbol
+		raw, err := s.py.DailyNote(symbol, body.Force)
+		if err != nil {
+			response.Error(w, http.StatusBadGateway, "daily note: "+err.Error())
+			return
+		}
+		s.writeRaw(w, raw)
+		return
+	}
+	if symbol == "" {
+		response.Error(w, http.StatusBadRequest, "symbol required")
+		return
+	}
+	raw, err := s.py.DailyNote(symbol, r.URL.Query().Get("force") == "1")
+	if err != nil {
+		response.Error(w, http.StatusBadGateway, "daily note: "+err.Error())
+		return
+	}
+	s.writeRaw(w, raw)
+}
+
+func (s *Server) paperAccount(w http.ResponseWriter, r *http.Request) {
+	quotes := map[string]float64{}
+	acc, err := s.paper.Snapshot(quotes)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	names := map[string]string{}
+	for i := range acc.Positions {
+		if q, e := s.bundle.Quote(acc.Positions[i].Symbol); e == nil && q != nil {
+			quotes[acc.Positions[i].Symbol] = q.Price
+			names[acc.Positions[i].Symbol] = q.Name
+		}
+	}
+	acc, err = s.paper.Snapshot(quotes)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	for i := range acc.Positions {
+		if n := names[acc.Positions[i].Symbol]; n != "" {
+			acc.Positions[i].Name = n
+		}
+	}
+	response.OK(w, acc)
+}
+
+func (s *Server) paperOrders(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		response.Error(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	var req paper.PlaceReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	req.Symbol = provider.PadSymbol(req.Symbol)
+	last := 0.0
+	if q, err := s.bundle.Quote(req.Symbol); err == nil && q != nil {
+		last = q.Price
+		req.Name = q.Name
+	}
+	acc, err := s.paper.Place(req, last)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(w, acc)
+}
+
+func (s *Server) writeRaw(w http.ResponseWriter, raw json.RawMessage) {
 	var dest interface{}
 	if err := json.Unmarshal(raw, &dest); err != nil {
 		response.Error(w, http.StatusBadGateway, err.Error())

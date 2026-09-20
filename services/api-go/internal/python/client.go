@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 )
@@ -92,5 +93,15 @@ func (c *Client) Profiles() (json.RawMessage, error) {
 func (c *Client) Analyze(payload json.RawMessage) (json.RawMessage, error) {
 	var dest json.RawMessage
 	err := c.post("/v1/ai/analyze", payload, &dest)
+	return dest, err
+}
+
+func (c *Client) DailyNote(symbol string, force bool) (json.RawMessage, error) {
+	var dest json.RawMessage
+	path := "/v1/ai/daily-note?symbol=" + url.QueryEscape(symbol)
+	if force {
+		path += "&force=1"
+	}
+	err := c.get(path, &dest)
 	return dest, err
 }

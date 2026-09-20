@@ -406,6 +406,168 @@ a {
   border-bottom: 0;
 }
 
+.detail-page {
+  display: grid;
+  gap: 16px;
+}
+
+.quote-name {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: 0.02em;
+}
+
+.quote-price .price {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.chart {
+  height: 440px;
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #0a1220;
+}
+
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.note-panel {
+  background: linear-gradient(180deg, #161e31 0%, #121a2b 70%);
+}
+
+.action-badge {
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-weight: 700;
+  background: #1b2438;
+}
+
+.action-badge.buy {
+  color: #fecaca;
+  background: #3f1d1d;
+}
+
+.action-badge.wait {
+  color: var(--accent);
+  background: #2a2314;
+}
+
+.action-badge.watch {
+  color: var(--muted);
+}
+
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.plan {
+  background: #0d1526;
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid #1c2740;
+}
+
+.plan span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.plan b {
+  display: block;
+  margin: 6px 0 4px;
+  font-size: 18px;
+}
+
+.plan em {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.plan.buy {
+  border-color: #3f2a16;
+}
+
+.plan.sell {
+  border-color: #16341f;
+}
+
+.note-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.note-cols h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--accent);
+}
+
+.note-cols p {
+  margin: 0 0 8px;
+  color: #c5d0e0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.base-good {
+  color: #86efac;
+  border-color: #24543a;
+}
+
+.base-caution,
+.base-risky {
+  color: #fbbf24;
+  border-color: #5a4a28;
+}
+
+.paper-ticket .ticket-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.ticket-row label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ticket-row input {
+  width: 140px;
+  border: 1px solid var(--line);
+  background: #0b1220;
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.buy-btn {
+  background: #ef4444;
+  color: #fff;
+}
+
+.sell-btn {
+  background: #16a34a;
+  color: #fff;
+}
+
 @media (max-width: 720px) {
   .indices,
   .metrics,
@@ -414,7 +576,9 @@ a {
     grid-template-columns: 1fr 1fr;
   }
 
-  .split {
+  .split,
+  .plan-grid,
+  .note-cols {
     grid-template-columns: 1fr;
   }
 
