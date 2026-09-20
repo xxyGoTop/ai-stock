@@ -1,0 +1,183 @@
+:root {
+  --bg: #0b1220;
+  --panel: #121a2b;
+  --line: #1f2a40;
+  --text: #e8eef8;
+  --muted: #8b97ad;
+  --up: #ef4444;
+  --down: #22c55e;
+  --accent: #f5c16c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.app {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 20px 16px 48px;
+}
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.brand {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.tag {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.search-box {
+  display: flex;
+  gap: 8px;
+}
+
+.search-box input {
+  flex: 1;
+  border: 1px solid var(--line);
+  background: #0b1220;
+  color: var(--text);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 16px;
+}
+
+.search-box button,
+.ghost {
+  border: 0;
+  background: var(--accent);
+  color: #1b1407;
+  border-radius: 10px;
+  padding: 0 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.indices {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.idx {
+  padding: 14px;
+}
+
+.idx .name {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.idx .price {
+  font-size: 22px;
+  margin-top: 6px;
+}
+
+.up {
+  color: var(--up);
+}
+
+.down {
+  color: var(--down);
+}
+
+.results {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #0d1526;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.warn {
+  color: #fbbf24;
+  font-size: 13px;
+  margin: 8px 0 16px;
+}
+
+.header-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.metric {
+  background: #0d1526;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.metric span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chart {
+  height: 420px;
+  width: 100%;
+}
+
+.back {
+  color: var(--muted);
+  display: inline-block;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 720px) {
+  .indices,
+  .metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+}

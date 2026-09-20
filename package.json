@@ -1,0 +1,15 @@
+{
+  "name": "ai-stock",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI Stock Research & Paper Trading Platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev -w @ai-stock/web",
+    "dev:api": "cd services/api-go && go run ./cmd/server",
+    "build:web": "npm run build -w @ai-stock/web"
+  }
+}

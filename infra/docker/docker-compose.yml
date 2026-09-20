@@ -1,0 +1,15 @@
+services:
+  api-go:
+    build:
+      context: ../../services/api-go
+    ports:
+      - "18080:18080"
+    environment:
+      API_ADDR: :18080
+      WEB_ORIGIN: http://localhost:5173
+
+  ai-python:
+    build:
+      context: ../../services/ai-python
+    ports:
+      - "8090:8090"
