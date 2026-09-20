@@ -89,6 +89,7 @@ def compute_snapshot(klines: list[dict]) -> dict:
     ma20 = sma(closes, 20)
     dif, dea, hist = macd(closes)
     rsi6 = rsi(closes, 6)
+    rsi14 = rsi(closes, 14)
     i = len(closes) - 1
     prev = i - 1
     price = closes[i]
@@ -96,14 +97,22 @@ def compute_snapshot(klines: list[dict]) -> dict:
     bias5 = ((price - ma5v) / ma5v * 100) if ma5v else None
     bull_align = bool(ma5v and ma10v and ma20v and ma5v > ma10v > ma20v)
     ma5_rising = bool(i >= 3 and ma5v and ma5[i - 3] and ma5v > ma5[i - 3])
+    ma10_rising = bool(i >= 3 and ma10v and ma10[i - 3] and ma10v > ma10[i - 3])
+    ma20_rising = bool(i >= 5 and ma20v and ma20[i - 5] and ma20v > ma20[i - 5])
     above_ma5 = bool(ma5v and price > ma5v)
+    above_ma10 = bool(ma10v and price > ma10v)
+    above_ma20 = bool(ma20v and price > ma20v)
+    lows = [k["low"] for k in klines]
+    support = min(lows[-10:]) if len(lows) >= 10 else (ma20v or ma10v)
     macd_golden = False
     macd_hist_expanding = False
     macd_above_zero = bool(dif[i] is not None and dea[i] is not None and dif[i] > 0 and dea[i] > 0)
     if prev >= 0 and dif[prev] is not None and dea[prev] is not None and dif[i] is not None and dea[i] is not None:
         macd_golden = dif[prev] <= dea[prev] and dif[i] > dea[i]
+    macd_green_shrinking = False
     if prev >= 0 and hist[i] is not None and hist[prev] is not None:
         macd_hist_expanding = hist[i] > 0 and hist[i] > hist[prev]
+        macd_green_shrinking = hist[i] < 0 and hist[i] > hist[prev]
     last_vol = volumes[i]
     prev_vol = volumes[prev] if prev >= 0 else 0
     gentle = False
@@ -124,9 +133,18 @@ def compute_snapshot(klines: list[dict]) -> dict:
         "bias5": bias5,
         "bullAlign": bull_align,
         "ma5Rising": ma5_rising,
+        "ma10Rising": ma10_rising,
+        "ma20Rising": ma20_rising,
         "aboveMa5": above_ma5,
+        "aboveMa10": above_ma10,
+        "aboveMa20": above_ma20,
+        "support": support,
+        "dif": dif[i],
+        "dea": dea[i],
+        "rsi14": rsi14[i],
         "macdGolden": macd_golden,
         "macdHistExpanding": macd_hist_expanding,
+        "macdGreenShrinking": macd_green_shrinking,
         "macdAboveZero": macd_above_zero,
         "lastVolume": last_vol,
         "prevVolume": prev_vol,

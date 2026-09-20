@@ -182,6 +182,8 @@ export interface DailyNote {
   symbol: string
   name: string
   industry: string
+  region?: string
+  concepts?: string[]
   asOf: string
   price: number
   changePercent: number
@@ -207,6 +209,34 @@ export interface DailyNote {
   }
   reasons: string[]
   risks: string[]
+  fund?: {
+    status: string
+    level: string
+    text: string
+    mainNetInflow: number | null
+    mainNetInflowPct: number | null
+  }
+  capital?: {
+    kind: 'inst' | 'hot' | 'mixed' | string
+    kindLabel: string
+    instText?: string
+    text: string
+    note?: string
+  }
+  chips?: {
+    status: string
+    text: string
+    concentration90?: number | null
+    profitRatio?: number | null
+  }
+  expect?: string
+  verdict?: {
+    macdTag?: string
+    macdHot?: boolean
+    items: { key: string; title: string; text: string; hint?: string; tone?: string }[]
+    pros: string[]
+    cons: string[]
+  }
   cached?: boolean
 }
 

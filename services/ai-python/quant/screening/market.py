@@ -131,7 +131,7 @@ def fetch_market_returns(pages=12) -> list[dict]:
 def fetch_quote(code: str) -> dict | None:
     code = str(code).zfill(6)
     market = 1 if guess_market(code) == "SH" else 0
-    fields = "f12,f13,f14,f2,f3,f4,f5,f6,f8,f10,f100"
+    fields = "f12,f13,f14,f2,f3,f4,f5,f6,f7,f8,f10,f21,f62,f66,f69,f72,f75,f100,f102,f103,f184"
     query = f"fltt=2&invt=2&fields={fields}&secids={market}.{code}"
     for host in EM_HOSTS:
         try:
@@ -140,6 +140,7 @@ def fetch_quote(code: str) -> dict | None:
             if not rows:
                 continue
             item = rows[0]
+            concepts = [x.strip() for x in str(item.get("f103") or "").split(",") if x.strip()][:8]
             return {
                 "symbol": str(item.get("f12") or code).zfill(6),
                 "name": str(item.get("f14") or "").strip(),
@@ -149,9 +150,20 @@ def fetch_quote(code: str) -> dict | None:
                 "change": _num(item.get("f4")),
                 "volume": _num(item.get("f5")),
                 "amount": _num(item.get("f6")),
+                "amplitude": _num(item.get("f7")),
                 "turnover": _num(item.get("f8")),
                 "volumeRatio": _num(item.get("f10")),
+                "circMV": _num(item.get("f21")),
+                "mainNetInflow": _num(item.get("f62")),
+                "superNetInflow": _num(item.get("f66")),
+                "superNetInflowPct": _num(item.get("f69")),
+                "bigNetInflow": _num(item.get("f72")),
+                "bigNetInflowPct": _num(item.get("f75")),
                 "industry": str(item.get("f100") or "").strip(),
+                "region": str(item.get("f102") or "").strip(),
+                "concepts": concepts,
+                "mainNetInflowPct": _num(item.get("f184")),
+                "fundKnown": True,
             }
         except Exception:
             continue

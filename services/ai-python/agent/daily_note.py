@@ -6,6 +6,7 @@ from pathlib import Path
 
 from quant.algorithms.registry import REGISTRY, run_all
 from quant.indicators import compute_snapshot
+from quant.meta import build_expect, build_verdict, classify_capital, describe_fund, estimate_chips
 from quant.screening.market import fetch_klines, fetch_quote
 from quant.tao import count_bases
 
@@ -21,7 +22,7 @@ def daily_note(symbol: str, force: bool = False) -> dict:
     symbol = "".join(ch for ch in str(symbol) if ch.isdigit()).zfill(6)
     as_of = _trade_date()
     cached = None if force else _load(as_of, symbol)
-    if cached:
+    if cached and cached.get("verdict"):
         cached["cached"] = True
         return cached
     note = _build(symbol, as_of)
@@ -47,7 +48,18 @@ def _build(symbol: str, as_of: str) -> dict:
             "changePercent": stock.get("changePercent") or klines[-1].get("changePercent") or 0,
             "turnover": stock.get("turnover") or 0,
             "volumeRatio": stock.get("volumeRatio") or 0,
+            "amplitude": stock.get("amplitude"),
+            "circMV": stock.get("circMV"),
             "industry": stock.get("industry") or "",
+            "region": stock.get("region") or "",
+            "concepts": stock.get("concepts") or [],
+            "mainNetInflow": stock.get("mainNetInflow"),
+            "mainNetInflowPct": stock.get("mainNetInflowPct"),
+            "superNetInflow": stock.get("superNetInflow"),
+            "superNetInflowPct": stock.get("superNetInflowPct"),
+            "bigNetInflow": stock.get("bigNetInflow"),
+            "bigNetInflowPct": stock.get("bigNetInflowPct"),
+            "limitUpStreak": indicators.get("limitUpStreak") or 0,
         },
         "klines": klines,
         "rps": {"rps20": 0, "rps50": 0, "rps120": 0, "rps250": 0},
@@ -67,11 +79,22 @@ def _build(symbol: str, as_of: str) -> dict:
         "今日五套算法均未命中，仅作观察。"
     ]
     risks = _risks(indicators, ctx["stock"], stance, plan, [h["algorithmCode"] for h in passed])
+    fund = describe_fund(
+        ctx["stock"].get("mainNetInflow"),
+        ctx["stock"].get("mainNetInflowPct"),
+        bool(stock.get("fundKnown")),
+    )
+    capital = classify_capital(ctx["stock"])
+    chips = estimate_chips(klines)
+    verdict = build_verdict(ctx["stock"], indicators, fund, chips, klines)
+    expect = build_expect(ctx["stock"], fund)
     return {
         "type": "daily_note",
         "symbol": symbol,
         "name": ctx["stock"]["name"],
-        "industry": ctx["stock"]["industry"],
+        "industry": ctx["stock"]["industry"] or "未知行业",
+        "region": ctx["stock"]["region"],
+        "concepts": ctx["stock"]["concepts"],
         "asOf": as_of,
         "price": ctx["stock"]["price"],
         "changePercent": ctx["stock"]["changePercent"],
@@ -98,12 +121,19 @@ def _build(symbol: str, as_of: str) -> dict:
         "plan": plan,
         "reasons": reasons,
         "risks": risks,
+        "fund": fund,
+        "capital": capital,
+        "chips": chips,
+        "expect": expect,
+        "verdict": verdict,
         "indicators": {
             "ma5": indicators.get("ma5"),
             "ma10": indicators.get("ma10"),
             "ma20": indicators.get("ma20"),
             "bias5": indicators.get("bias5"),
             "rsi6": indicators.get("rsi6"),
+            "rsi14": indicators.get("rsi14"),
+            "hist": indicators.get("hist"),
             "macdGolden": indicators.get("macdGolden"),
             "bullAlign": indicators.get("bullAlign"),
         },
