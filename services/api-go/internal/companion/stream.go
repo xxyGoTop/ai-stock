@@ -190,7 +190,7 @@ func planForAction(action string) []PlanStep {
 	case "watch_anomaly", "anomaly":
 		return []PlanStep{
 			{ID: "load", Title: "读取自选列表", Status: "pending"},
-			{ID: "scan", Title: "扫描涨跌与量能", Status: "pending"},
+			{ID: "scan", Title: "扫描涨跌、资金与拉升", Status: "pending"},
 			{ID: "judge", Title: "生成异动结论", Status: "pending"},
 		}
 	default:

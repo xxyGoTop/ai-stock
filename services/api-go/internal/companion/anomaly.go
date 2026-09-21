@@ -20,11 +20,16 @@ type Anomaly struct {
 	ChangePercent float64  `json:"changePercent"`
 	VolumeRatio   float64  `json:"volumeRatio,omitempty"`
 	Turnover      float64  `json:"turnover,omitempty"`
-	Industry      string   `json:"industry,omitempty"`
-	Level         string   `json:"level"` // mild | notable | strong
-	Reasons       []string `json:"reasons"`
-	Summary       string   `json:"summary"`
-	Fingerprint   string   `json:"fingerprint"`
+	Industry         string   `json:"industry,omitempty"`
+	Level            string   `json:"level"` // mild | notable | strong
+	Reasons          []string `json:"reasons"`
+	Summary          string   `json:"summary"`
+	Fingerprint      string   `json:"fingerprint"`
+	MainNetInflow    float64  `json:"mainNetInflow,omitempty"`
+	MainNetInflowPct float64  `json:"mainNetInflowPct,omitempty"`
+	FundText         string   `json:"fundText,omitempty"`
+	Lift             string   `json:"lift,omitempty"`
+	LiftText         string   `json:"liftText,omitempty"`
 }
 
 type AnomalyScan struct {
@@ -111,7 +116,7 @@ func judgeAnomaly(it watchlist.Item, q *provider.Quote, asOf string) (Anomaly, b
 	if name == "" {
 		name = it.Name
 	}
-	reasons := make([]string, 0, 3)
+	reasons := make([]string, 0, 6)
 	level := ""
 
 	absChg := math.Abs(q.ChangePercent)
@@ -144,6 +149,35 @@ func judgeAnomaly(it watchlist.Item, q *provider.Quote, asOf string) (Anomaly, b
 		level = bumpLevel(level, "mild")
 	}
 
+	fundIn, fundOut, fundText, fundLv := fundMove(q)
+	if fundText != "" {
+		reasons = append(reasons, fundText)
+		level = bumpLevel(level, fundLv)
+	}
+	if math.Abs(q.SuperNetInflow) >= 3e7 {
+		if q.SuperNetInflow > 0 {
+			reasons = append(reasons, "超大单净买入 "+fmtFund(q.SuperNetInflow))
+		} else {
+			reasons = append(reasons, "超大单净卖出 "+fmtFund(q.SuperNetInflow))
+		}
+		level = bumpLevel(level, "notable")
+	}
+
+	liftKind, liftText, liftLv := liftState(q)
+	if liftKind == "lifting" {
+		reasons = append(reasons, liftText)
+		level = bumpLevel(level, liftLv)
+		if fundIn {
+			reasons = append(reasons, "资金推动拉升")
+			level = bumpLevel(level, "notable")
+		} else if fundOut {
+			reasons = append(reasons, "拉升过程主力兑现")
+			level = bumpLevel(level, "notable")
+		}
+	} else if fundText != "" {
+		reasons = append(reasons, liftText)
+	}
+
 	if len(reasons) == 0 {
 		return Anomaly{}, false
 	}
@@ -155,18 +189,99 @@ func judgeAnomaly(it watchlist.Item, q *provider.Quote, asOf string) (Anomaly, b
 	day := strings.Split(asOf, " ")[0]
 	fp := fmt.Sprintf("%s|%s|%s", q.Symbol, day, strings.Join(reasons, ","))
 	return Anomaly{
-		Symbol:        q.Symbol,
-		Name:          name,
-		Price:         q.Price,
-		ChangePercent: q.ChangePercent,
-		VolumeRatio:   q.VolumeRatio,
-		Turnover:      q.Turnover,
-		Industry:      q.Industry,
-		Level:         level,
-		Reasons:       reasons,
-		Summary:       summary,
-		Fingerprint:   fp,
+		Symbol:           q.Symbol,
+		Name:             name,
+		Price:            q.Price,
+		ChangePercent:    q.ChangePercent,
+		VolumeRatio:      q.VolumeRatio,
+		Turnover:         q.Turnover,
+		Industry:         q.Industry,
+		Level:            level,
+		Reasons:          reasons,
+		Summary:          summary,
+		Fingerprint:      fp,
+		MainNetInflow:    q.MainNetInflow,
+		MainNetInflowPct: q.MainNetInflowPct,
+		FundText:         fundText,
+		Lift:             liftKind,
+		LiftText:         liftText,
 	}, true
+}
+
+func fundMove(q *provider.Quote) (in, out bool, text, level string) {
+	main := q.MainNetInflow
+	pct := q.MainNetInflowPct
+	absMain := math.Abs(main)
+	absPct := math.Abs(pct)
+	if absMain < 1e7 && absPct < 2 {
+		return false, false, "", ""
+	}
+	if main > 0 {
+		in = true
+		text = "主力净买入 " + fmtFund(main)
+		if pct != 0 {
+			text += fmt.Sprintf("（占成交 %+.1f%%）", pct)
+		}
+		level = "notable"
+		if absMain >= 5e7 || absPct >= 5 {
+			text = "主力大幅买入 " + fmtFund(main)
+			if pct != 0 {
+				text += fmt.Sprintf("（占成交 %+.1f%%）", pct)
+			}
+			level = "strong"
+		}
+		return in, false, text, level
+	}
+	out = true
+	text = "主力净卖出 " + fmtFund(main)
+	if pct != 0 {
+		text += fmt.Sprintf("（占成交 %+.1f%%）", pct)
+	}
+	level = "notable"
+	if absMain >= 5e7 || absPct >= 5 {
+		text = "主力大幅卖出 " + fmtFund(main)
+		if pct != 0 {
+			text += fmt.Sprintf("（占成交 %+.1f%%）", pct)
+		}
+		level = "strong"
+	}
+	return false, out, text, level
+}
+
+func liftState(q *provider.Quote) (kind, text, level string) {
+	base := q.Open
+	if base <= 0 {
+		base = q.PrevClose
+	}
+	if base <= 0 {
+		return "none", "未见明显拉升", ""
+	}
+	fromOpen := (q.Price - base) / base * 100
+	nearHigh := q.High > 0 && (q.High-q.Price)/q.High <= 0.012 && q.Price >= q.Open
+	if fromOpen >= 4 || (q.ChangePercent >= 5 && fromOpen >= 2) {
+		if q.VolumeRatio >= 1.5 {
+			return "lifting", fmt.Sprintf("放量拉升，较开盘 %+.2f%%", fromOpen), "strong"
+		}
+		return "lifting", fmt.Sprintf("明显拉升，较开盘 %+.2f%%", fromOpen), "strong"
+	}
+	if fromOpen >= 2.2 && nearHigh {
+		return "lifting", fmt.Sprintf("盘中拉升，现价贴近最高，较开盘 %+.2f%%", fromOpen), "notable"
+	}
+	if fromOpen >= 1.5 && q.ChangePercent >= 1.2 {
+		return "lifting", fmt.Sprintf("有拉升迹象，较开盘 %+.2f%%", fromOpen), "mild"
+	}
+	if fromOpen <= -1.5 {
+		return "none", "未见拉升，现价低于开盘", ""
+	}
+	return "none", "未见明显拉升", ""
+}
+
+func fmtFund(n float64) string {
+	yi := n / 1e8
+	if math.Abs(yi) >= 0.01 {
+		return fmt.Sprintf("%+.2f亿", yi)
+	}
+	return fmt.Sprintf("%+.0f万", n/1e4)
 }
 
 func bumpLevel(cur, next string) string {

@@ -83,7 +83,7 @@ func (b *Bundle) Quote(symbol string) (*Quote, error) {
 }
 
 func fetchEMQuote(client *http.Client, symbol string) (*Quote, error) {
-	fields := "f12,f13,f14,f2,f3,f4,f5,f6,f7,f8,f10,f15,f16,f17,f18,f20,f100"
+	fields := "f12,f13,f14,f2,f3,f4,f5,f6,f7,f8,f10,f15,f16,f17,f18,f20,f62,f66,f72,f100,f184"
 	query := "fltt=2&invt=2&fields=" + url.QueryEscape(fields) + "&secids=" + url.QueryEscape(SecID(symbol, GuessMarket(symbol)))
 	var lastErr error
 	for _, host := range emHosts {
@@ -139,8 +139,12 @@ func quoteFromEM(m map[string]interface{}) *Quote {
 		Amount:        asFloat(m["f6"]),
 		Turnover:      asFloat(m["f8"]),
 		VolumeRatio:   asFloat(m["f10"]),
-		Amplitude:     asFloat(m["f7"]),
-		Industry:      asString(m["f100"]),
+		Amplitude:        asFloat(m["f7"]),
+		Industry:         asString(m["f100"]),
+		MainNetInflow:    asFloat(m["f62"]),
+		MainNetInflowPct: asFloat(m["f184"]),
+		SuperNetInflow:   asFloat(m["f66"]),
+		BigNetInflow:     asFloat(m["f72"]),
 	}
 }
 

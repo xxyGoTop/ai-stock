@@ -326,6 +326,12 @@ function BlockView({
                   <span className={`anomaly-badge ${it.level}`}>{levelLabel[it.level] || it.level}</span>
                   <span className={changeTone(it.changePercent)}>{formatChange(it.changePercent)}</span>
                 </div>
+                <div className="anomaly-tags">
+                  {it.fundText ? <span className="anomaly-tag fund">{it.fundText}</span> : null}
+                  {it.liftText ? (
+                    <span className={`anomaly-tag ${it.lift === 'lifting' ? 'lift' : 'flat'}`}>{it.liftText}</span>
+                  ) : null}
+                </div>
                 <p className="muted anomaly-reasons">{(it.reasons || []).join(' · ')}</p>
                 <div className="action-row tight">
                   <button type="button" className="pill" onClick={() => onAction('analyze', it.symbol, it.name)}>

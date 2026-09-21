@@ -26,8 +26,12 @@ type Quote struct {
 	Amount        float64 `json:"amount"`
 	Turnover      float64 `json:"turnover"`
 	VolumeRatio   float64 `json:"volumeRatio"`
-	Amplitude     float64 `json:"amplitude"`
-	Industry      string  `json:"industry"`
+	Amplitude        float64 `json:"amplitude"`
+	Industry         string  `json:"industry"`
+	MainNetInflow    float64 `json:"mainNetInflow,omitempty"`
+	MainNetInflowPct float64 `json:"mainNetInflowPct,omitempty"`
+	SuperNetInflow   float64 `json:"superNetInflow,omitempty"`
+	BigNetInflow     float64 `json:"bigNetInflow,omitempty"`
 }
 
 type KlineBar struct {

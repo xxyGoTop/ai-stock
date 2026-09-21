@@ -20,6 +20,10 @@ export interface Quote extends Stock {
   volumeRatio: number
   amplitude: number
   industry: string
+  mainNetInflow?: number
+  mainNetInflowPct?: number
+  superNetInflow?: number
+  bigNetInflow?: number
 }
 
 export interface KlineBar {
@@ -421,6 +425,11 @@ export interface WatchAnomaly {
   reasons: string[]
   summary: string
   fingerprint: string
+  mainNetInflow?: number
+  mainNetInflowPct?: number
+  fundText?: string
+  lift?: 'lifting' | 'none' | string
+  liftText?: string
 }
 
 export interface AnomalyScan {
