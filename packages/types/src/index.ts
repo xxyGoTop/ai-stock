@@ -461,6 +461,25 @@ export interface AnomalyScan {
   hasWatch: boolean
 }
 
+export interface CompanionNotice {
+  id: string
+  kind: 'anomaly' | 'today_ops' | string
+  title: string
+  summary: string
+  action?: string
+  symbol?: string
+  name?: string
+  createdAt: string
+  read: boolean
+  items?: WatchAnomaly[] | WatchItem[]
+  meta?: Record<string, unknown>
+}
+
+export interface NotificationInbox {
+  items: CompanionNotice[]
+  count: number
+}
+
 export interface CompanionWorkspace {
   type: 'market' | 'stock' | 'empty' | string
   symbol?: string

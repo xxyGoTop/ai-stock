@@ -51,7 +51,7 @@ Web 是 React，业务 API 是 Go，量化计算与 LLM Agent 在 Python。Andro
     │
     ▼
 Go API :18080
-    ├── companion/     进房简报、Chat、Agent Run SSE、自选异动扫描
+    ├── companion/     进房简报、Chat、Agent Run SSE、异动扫描、Notification Agent
     ├── watchlist/     自选 JSON
     ├── dailypicks/    每日推荐归档 JSON
     ├── paper/         模拟账户
@@ -82,7 +82,7 @@ Go API :18080
 |---|---|
 | `services/api-go/internal/companion/stream.go` | Agent Run SSE 推送 |
 | `services/api-go/internal/companion/anomaly.go` | 自选异动规则与扫描 |
-| `services/api-go/internal/companion/briefing.go` / `chat.go` | 简报与意图路由 |
+| `services/api-go/internal/companion/briefing.go` / `chat.go` / `notify.go` | 简报、意图路由、Notification Agent |
 | `services/api-go/internal/dailypicks/` | 每日推荐持久化 |
 | `services/api-go/internal/httpserver/server.go` | 路由注册 |
 
@@ -96,15 +96,16 @@ Go API :18080
 4. **每日 30 推荐 + 设置页归档**：`GET /api/v1/daily-picks`
 5. **自选异动 MVP**：`GET /api/v1/watchlist/anomalies`；意图 `watch_anomaly`；简报块 + 页内主动提醒
 6. **Vite SSE 代理**：`apps/web/vite.config.ts` 对 `text/event-stream` 关缓冲
+7. **Notification Agent**：Go 后台定时扫描自选异动与今日操作，指纹去重写入 `data/notifications.json`；对话拉 `GET /api/v1/notifications` 并 `PATCH` 已读
 
 建议下一步：
 
 - [x] 异动规则可配置（设置页阈值）
-- [ ] Notification Agent 后台定时（不仅页内 poll）
+- [x] Notification Agent 后台定时（不仅页内 poll）
 - [ ] 服务端会话 / research_events 持久化（现在是 sessionStorage）
 - [ ] 更丰富 Workspace 块（对比、风险卡等，见 V2 文档 Phase 2–4）
 
-本地数据（不进 Git）：`services/api-go/data/watchlist.json`、`paper.json`、`daily-picks/`。换机后自选与模拟账户需重新加或自行拷贝。
+本地数据（不进 Git）：`services/api-go/data/watchlist.json`、`paper.json`、`anomaly_rules.json`、`notifications.json`、`daily-picks/`。换机后自选与模拟账户需重新加或自行拷贝。
 
 ## 五套选股算法
 
@@ -141,6 +142,7 @@ Go API :18080
 | `ARK_API_KEY` | 火山方舟（官方变量名，优先） |
 | `LLM_ARK_KEY` | 火山方舟备用 |
 | `LLM_ARK_MODEL` | 可选，覆盖豆包 Seed 的 Model ID / 推理接入点 `ep-xxx` |
+| `NOTIFY_INTERVAL_SEC` | Notification Agent 扫描间隔，默认 120，最小 30 |
 
 不配密钥也能用内置 `quant-rules`。对话默认走火山方舟 [Chat API](https://www.volcengine.com/docs/82379/1112500)（`https://ark.cn-beijing.volces.com/api/v3`）：
 

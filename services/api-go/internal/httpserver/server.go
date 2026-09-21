@@ -50,6 +50,10 @@ func New(timeout time.Duration) *Server {
 	}
 }
 
+func (s *Server) StartBackground() {
+	s.comp.StartNotifier()
+}
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.health)
@@ -75,6 +79,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/paper/orders", s.paperOrders)
 	mux.HandleFunc("/api/v1/paper/positions", s.paperPositions)
 	mux.HandleFunc("/api/v1/paper/reset", s.paperReset)
+	mux.HandleFunc("/api/v1/notifications", s.notifications)
 	mux.HandleFunc("/api/v1/watchlist/anomaly-rules", s.watchAnomalyRules)
 	mux.HandleFunc("/api/v1/watchlist/anomalies", s.watchAnomalies)
 	mux.HandleFunc("/api/v1/watchlist/today-ops", s.watchTodayOps)
@@ -456,6 +461,36 @@ func (s *Server) watchTodayOps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.OK(w, scan)
+}
+
+func (s *Server) notifications(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		items, err := s.comp.UnreadNotices()
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if items == nil {
+			items = []companion.Notice{}
+		}
+		response.OK(w, map[string]interface{}{"items": items, "count": len(items)})
+	case http.MethodPatch:
+		var body struct {
+			IDs []string `json:"ids"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			response.Error(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		if err := s.comp.AckNotices(body.IDs); err != nil {
+			response.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		response.OK(w, map[string]interface{}{"acked": len(body.IDs)})
+	default:
+		response.Error(w, http.StatusMethodNotAllowed, "GET or PATCH")
+	}
 }
 
 func (s *Server) watchItems(w http.ResponseWriter, r *http.Request) {

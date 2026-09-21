@@ -120,7 +120,7 @@ export default function Settings() {
       <section className="panel" style={{ marginTop: 16 }}>
         <h2 className="section-title">自选异动阈值</h2>
         <p className="muted">
-          对话「异动」和页内提醒共用这套规则。资金单位是亿元。改完立即生效，文件在服务端{' '}
+          对话「异动」、后台 Notification Agent 和页内收件箱共用这套规则。交易日约每 2 分钟扫描一次，指纹去重后写入服务端收件箱。资金单位是亿元。改完立即生效，文件在{' '}
           <code>services/api-go/data/anomaly_rules.json</code>。
         </p>
         {rules ? (

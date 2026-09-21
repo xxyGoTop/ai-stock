@@ -21,6 +21,7 @@ func main() {
 		}
 	}
 	srv := httpserver.New(timeout)
+	srv.StartBackground()
 	log.Printf("api-go listening on %s", addr)
 	if err := http.ListenAndServe(addr, srv.Handler()); err != nil {
 		log.Fatal(err)

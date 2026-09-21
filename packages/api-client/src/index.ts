@@ -6,8 +6,10 @@ import type {
   AnomalyRulesConfig,
   AnomalyScan,
   ApiResponse,
+  NotificationInbox,
   CompanionBriefing,
   CompanionChatResponse,
+  CompanionNotice,
   AgentStreamEvent,
   DailyPickRecord,
   IndicatorResult,
@@ -139,6 +141,14 @@ export function resetAnomalyRules() {
 
 export function getTodayOps() {
   return get<TodayOpsScan>('/watchlist/today-ops')
+}
+
+export function getNotifications() {
+  return get<NotificationInbox>('/notifications').then((r) => r.items || [])
+}
+
+export function ackNotifications(ids: string[]) {
+  return patch<{ acked: number }>('/notifications', { ids })
 }
 
 export function addWatchItem(body: {

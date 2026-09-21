@@ -1,13 +1,13 @@
 import { FormEvent, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import {
+  ackNotifications,
   companionChatStream,
   getCompanionBriefing,
   getIndicators,
   getKline,
+  getNotifications,
   getStock,
   getStockNews,
-  getWatchAnomalies,
-  getTodayOps,
   listLlmModels,
 } from '@ai-stock/api-client'
 import type {
@@ -16,12 +16,15 @@ import type {
   CompanionBlock,
   CompanionBriefing,
   CompanionChatResponse,
+  CompanionNotice,
   CompanionWorkspace,
   IndicatorPoint,
   KlineBar,
   LlmModel,
   Quote,
   StockNewsFeed,
+  WatchAnomaly,
+  WatchItem,
 } from '@ai-stock/types'
 import ChatBlocks from '../components/ChatBlocks'
 import ChatModelSelect from '../components/ChatModelSelect'
@@ -64,8 +67,6 @@ const QUICK = [
   { label: '异动', message: '看看自选异动', action: 'watch_anomaly' },
 ]
 
-const ANOMALY_SEEN_KEY = 'ai-stock.anomaly.seen'
-const TODAY_OPS_SEEN_KEY = 'ai-stock.todayops.seen'
 const LAYOUT_KEY = 'ai-stock.layout.v1'
 const WS_MIN = 280
 const WS_MAX = 720
@@ -99,6 +100,82 @@ function saveLayout(p: LayoutPrefs) {
     localStorage.setItem(LAYOUT_KEY, JSON.stringify(p))
   } catch {
     /* ignore */
+  }
+}
+
+function briefingFingerprints(data: CompanionBriefing): string[] {
+  const out: string[] = []
+  data.anomalies?.forEach((a) => {
+    if (a.fingerprint) out.push(`a|${a.fingerprint}`)
+  })
+  data.todayOps?.forEach((it) => out.push(`t|${it.symbol}|${it.planForDate || ''}`))
+  return out
+}
+
+function noticeFingerprints(n: CompanionNotice): string[] {
+  const items = Array.isArray(n.items) ? n.items : []
+  if (n.kind === 'today_ops') {
+    return items.map((it) => {
+      const row = it as WatchItem
+      return `t|${row.symbol || ''}|${row.planForDate || ''}`
+    })
+  }
+  return items
+    .map((it) => {
+      const row = it as WatchAnomaly
+      return row.fingerprint ? `a|${row.fingerprint}` : ''
+    })
+    .filter(Boolean)
+}
+
+function noticeToMsg(n: CompanionNotice): ChatMsg {
+  if (n.kind === 'today_ops') {
+    const items = (Array.isArray(n.items) ? n.items : []) as WatchItem[]
+    const topName = n.name || items[0]?.name || ''
+    return {
+      id: uid(),
+      role: 'assistant',
+      proactive: true,
+      text: `【今日操作】${n.summary}`,
+      blocks: [
+        {
+          type: 'today_ops',
+          title: n.title || '今日操作推送',
+          text: n.summary,
+          items,
+          meta: { ...(n.meta || {}), pageSize: 6, count: items.length },
+        },
+        {
+          type: 'suggestions',
+          title: '按计划执行',
+          items: topName
+            ? [`分析${topName}`, '今日操作', '明日计划', '我的自选']
+            : ['今日操作', '明日计划', '我的自选'],
+        },
+      ],
+    }
+  }
+  const items = (Array.isArray(n.items) ? n.items : []) as WatchAnomaly[]
+  const top = items[0]
+  return {
+    id: uid(),
+    role: 'assistant',
+    proactive: true,
+    text: `【主动提醒】${n.summary}`,
+    blocks: [
+      {
+        type: 'anomaly',
+        title: n.title || '自选异动推送',
+        text: n.summary,
+        items,
+        meta: { ...(n.meta || {}), count: items.length },
+      },
+      {
+        type: 'suggestions',
+        title: '要不要继续',
+        items: [`分析${top?.name || n.name || '这只股票'}`, '看看自选异动', '我的自选'],
+      },
+    ],
   }
 }
 
@@ -150,6 +227,8 @@ export default function Chat() {
   const [chatModels, setChatModels] = useState<LlmModel[]>([])
   const [chatModel, setChatModel] = useState(() => localStorage.getItem(CHAT_MODEL_KEY) || 'auto')
   const dragRef = useRef<{ startX: number; startW: number } | null>(null)
+  const briefingCoveredRef = useRef<Set<string>>(new Set())
+  const deliveredNoticeRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     listLlmModels()
@@ -196,27 +275,7 @@ export default function Chat() {
       setPhaseLabel(data.phaseLabel)
       setMessages(msgs)
       setWorkspace({ type: 'market', tab: 'overview' })
-      // 简报已展示的异动记为已读，避免随后主动推送重复
-      if (data.anomalies?.length) {
-        try {
-          const raw = sessionStorage.getItem(ANOMALY_SEEN_KEY)
-          const set = new Set(raw ? (JSON.parse(raw) as string[]) : [])
-          data.anomalies.forEach((a) => a.fingerprint && set.add(a.fingerprint))
-          sessionStorage.setItem(ANOMALY_SEEN_KEY, JSON.stringify([...set].slice(-80)))
-        } catch {
-          /* ignore */
-        }
-      }
-      if (data.todayOps?.length) {
-        try {
-          const raw = sessionStorage.getItem(TODAY_OPS_SEEN_KEY)
-          const set = new Set(raw ? (JSON.parse(raw) as string[]) : [])
-          data.todayOps.forEach((it) => set.add(`${it.symbol}|${it.planForDate || 'due'}`))
-          sessionStorage.setItem(TODAY_OPS_SEEN_KEY, JSON.stringify([...set].slice(-80)))
-        } catch {
-          /* ignore */
-        }
-      }
+      briefingCoveredRef.current = new Set(briefingFingerprints(data))
       saveActiveConversation({
         messages: msgs,
         briefing: data,
@@ -305,134 +364,49 @@ export default function Chat() {
     stickToBottom(true)
   }
 
-  // 自选异动：页内主动推送（去重指纹）
+  // 收件箱：服务端 Notification Agent 扫描后写入，页内只拉未读
   useEffect(() => {
     let cancelled = false
-    const seen = (): Set<string> => {
-      try {
-        const raw = sessionStorage.getItem(ANOMALY_SEEN_KEY)
-        return new Set(raw ? (JSON.parse(raw) as string[]) : [])
-      } catch {
-        return new Set()
-      }
+    let busy = false
+    const covered = (n: CompanionNotice) => {
+      const fps = noticeFingerprints(n)
+      if (!fps.length) return false
+      const set = briefingCoveredRef.current
+      return fps.every((fp) => set.has(fp))
     }
-    const remember = (fps: string[]) => {
-      const set = seen()
-      fps.forEach((f) => set.add(f))
-      const arr = [...set].slice(-80)
-      try {
-        sessionStorage.setItem(ANOMALY_SEEN_KEY, JSON.stringify(arr))
-      } catch {
-        /* ignore */
-      }
+    const remember = (n: CompanionNotice) => {
+      noticeFingerprints(n).forEach((fp) => briefingCoveredRef.current.add(fp))
     }
     const poll = async () => {
-      if (cancelled || loading || document.hidden) return
+      if (cancelled || loading || document.hidden || busy) return
+      busy = true
       try {
-        const scan = await getWatchAnomalies()
-        if (cancelled || !scan.hasWatch || scan.count === 0) return
-        const known = seen()
-        const fresh = (scan.items || []).filter((it) => it.fingerprint && !known.has(it.fingerprint))
-        if (!fresh.length) return
-        remember(fresh.map((f) => f.fingerprint))
-        const top = fresh[0]
-        const msg: ChatMsg = {
-          id: uid(),
-          role: 'assistant',
-          proactive: true,
-          text: `【主动提醒】${scan.summary} 例如 ${top.name}：${(top.reasons || []).join('；')}。`,
-          blocks: [
-            {
-              type: 'anomaly',
-              title: '自选异动推送',
-              text: scan.summary,
-              items: fresh,
-              meta: { asOf: scan.asOf, count: fresh.length },
-            },
-            {
-              type: 'suggestions',
-              title: '要不要继续',
-              items: [`分析${top.name}`, '看看自选异动', '我的自选'],
-            },
-          ],
-        }
-        setMessages((prev) => [...prev, msg])
+        const inbox = await getNotifications()
+        const unread = inbox.filter((n) => n.id && !deliveredNoticeRef.current.has(n.id))
+        if (cancelled || !unread.length) return
+        const fresh = unread.filter((n) => !covered(n))
+        unread.forEach((n) => deliveredNoticeRef.current.add(n.id))
+        await ackNotifications(unread.map((n) => n.id))
+        if (cancelled || !fresh.length) return
+        fresh.forEach(remember)
+        setMessages((prev) => [...prev, ...fresh.map(noticeToMsg)])
       } catch {
         /* ignore poll errors */
+      } finally {
+        busy = false
       }
     }
-    const t0 = window.setTimeout(() => void poll(), 12_000)
-    const timer = window.setInterval(() => void poll(), 180_000)
+    const t0 = window.setTimeout(() => void poll(), 8_000)
+    const timer = window.setInterval(() => void poll(), 45_000)
+    const onVis = () => {
+      if (!document.hidden) void poll()
+    }
+    document.addEventListener('visibilitychange', onVis)
     return () => {
       cancelled = true
       window.clearTimeout(t0)
       window.clearInterval(timer)
-    }
-  }, [loading])
-
-  // 今日操作：明日计划到期后页内推送
-  useEffect(() => {
-    let cancelled = false
-    const fpOf = (it: { symbol: string; planForDate?: string }) =>
-      `${it.symbol}|${it.planForDate || 'due'}`
-    const seen = (): Set<string> => {
-      try {
-        const raw = sessionStorage.getItem(TODAY_OPS_SEEN_KEY)
-        return new Set(raw ? (JSON.parse(raw) as string[]) : [])
-      } catch {
-        return new Set()
-      }
-    }
-    const remember = (fps: string[]) => {
-      const set = seen()
-      fps.forEach((f) => set.add(f))
-      try {
-        sessionStorage.setItem(TODAY_OPS_SEEN_KEY, JSON.stringify([...set].slice(-80)))
-      } catch {
-        /* ignore */
-      }
-    }
-    const poll = async () => {
-      if (cancelled || loading || document.hidden) return
-      try {
-        const scan = await getTodayOps()
-        if (cancelled || scan.count === 0) return
-        const known = seen()
-        const fresh = (scan.items || []).filter((it) => !known.has(fpOf(it)))
-        if (!fresh.length) return
-        remember(fresh.map(fpOf))
-        const top = fresh[0]
-        const msg: ChatMsg = {
-          id: uid(),
-          role: 'assistant',
-          proactive: true,
-          text: `【今日操作】${scan.summary}`,
-          blocks: [
-            {
-              type: 'today_ops',
-              title: '今日操作推送',
-              text: scan.summary,
-              items: fresh,
-              meta: { asOf: scan.asOf, date: scan.date, pageSize: 6, count: fresh.length },
-            },
-            {
-              type: 'suggestions',
-              title: '按计划执行',
-              items: [`分析${top.name}`, '今日操作', '明日计划', '我的自选'],
-            },
-          ],
-        }
-        setMessages((prev) => [...prev, msg])
-      } catch {
-        /* ignore */
-      }
-    }
-    const t0 = window.setTimeout(() => void poll(), 18_000)
-    const timer = window.setInterval(() => void poll(), 240_000)
-    return () => {
-      cancelled = true
-      window.clearTimeout(t0)
-      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVis)
     }
   }, [loading])
 

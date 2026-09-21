@@ -101,10 +101,19 @@ type Service struct {
 	watch  *watchlist.Store
 	picks  *dailypicks.Store
 	rules  *RulesStore
+	notify *notifyStore
+	once   sync.Once
 }
 
 func New(bundle *provider.Bundle, py *python.Client, watch *watchlist.Store, picks *dailypicks.Store) *Service {
-	return &Service{bundle: bundle, py: py, watch: watch, picks: picks, rules: NewRulesStore()}
+	return &Service{
+		bundle: bundle,
+		py:     py,
+		watch:  watch,
+		picks:  picks,
+		rules:  NewRulesStore(),
+		notify: newNotifyStore(),
+	}
 }
 
 func (s *Service) GetAnomalyRules() AnomalyRules {
