@@ -18,8 +18,8 @@ const MODEL: Record<string, string> = {
   'intern-s2-free': 'Intern S2',
   'deepseek-chat': 'DeepSeek',
   'qwen-plus': '通义千问',
-  'doubao-seed-1-6': '豆包 Seed 1.6',
-  'doubao-lite': '豆包 Lite',
+  'doubao-seed-2-1-pro': '豆包 Seed 2.1 Pro',
+  'deepseek-v4-flash': 'DeepSeek V4 Flash',
 }
 const PROFILE: Record<string, string> = {
   stock_analysis_fast: '快速',

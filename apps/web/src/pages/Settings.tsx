@@ -116,9 +116,8 @@ export default function Settings() {
       <section className="panel" style={{ marginTop: 16 }}>
         <h2 className="section-title">分析设置</h2>
         <p className="muted">
-          密钥只读环境变量，不入库。火山方舟用 <code>LLM_ARK_KEY</code>（也认 <code>ARK_API_KEY</code>），
-          接入点或模型 ID 可写 <code>LLM_ARK_MODEL</code>。对话默认走「火山方舟」回退：豆包 Seed → Lite →
-          AIHubMix → DeepSeek / Qwen → 量化规则。AIHubMix 用 <code>LLM_AIHUBMIX_KEY</code>。
+          密钥只写项目根目录 <code>.env</code>，不入库。火山方舟填 <code>ARK_API_KEY</code>（也认{' '}
+          <code>LLM_ARK_KEY</code>）。对话默认：豆包 Seed 2.1 Pro → DeepSeek V4 Flash → AIHubMix → 量化规则。
         </p>
         {error && <p className="warn">{error}</p>}
         <div className="algo-pills">

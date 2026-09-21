@@ -32,7 +32,7 @@
       "code": "volcengine_ark",
       "kind": "openai_compatible",
       "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
-      "apiKeyRef": "env:LLM_ARK_KEY|ARK_API_KEY",
+      "apiKeyRef": "env:ARK_API_KEY|LLM_ARK_KEY",
       "enabled": true
     }
   ],
@@ -96,10 +96,10 @@
       "enabled": true
     },
     {
-      "code": "doubao-seed-1-6",
-      "label": "豆包 Seed 1.6",
+      "code": "doubao-seed-2-1-pro",
+      "label": "豆包 Seed 2.1 Pro",
       "providerCode": "volcengine_ark",
-      "modelName": "doubao-seed-1-6-251015",
+      "modelName": "doubao-seed-2-1-pro-260628",
       "modelNameRef": "env:LLM_ARK_MODEL|ARK_MODEL",
       "roles": ["analyst", "screener", "planner", "judge"],
       "maxTokens": 2048,
@@ -109,10 +109,10 @@
       "enabled": true
     },
     {
-      "code": "doubao-lite",
-      "label": "豆包 Lite",
+      "code": "deepseek-v4-flash",
+      "label": "DeepSeek V4 Flash",
       "providerCode": "volcengine_ark",
-      "modelName": "doubao-1-5-lite-32k-250115",
+      "modelName": "deepseek-v4-1-flash-260910",
       "roles": ["analyst", "screener", "judge"],
       "maxTokens": 2048,
       "timeoutMs": 60000,
@@ -155,8 +155,8 @@
       "agentCode": "stock_analyst",
       "mode": "fallback",
       "models": [
-        { "modelCode": "doubao-seed-1-6", "weight": 1, "temperature": 0.2 },
-        { "modelCode": "doubao-lite", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "doubao-seed-2-1-pro", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "deepseek-v4-flash", "weight": 1, "temperature": 0.2 },
         { "modelCode": "agents-a1-free", "weight": 1, "temperature": 0.2 },
         { "modelCode": "intern-s2-free", "weight": 1, "temperature": 0.2 },
         { "modelCode": "deepseek-chat", "weight": 1, "temperature": 0.2 },
@@ -164,8 +164,8 @@
         { "modelCode": "quant-rules", "weight": 1, "temperature": 0 }
       ],
       "fallback": [
-        "doubao-seed-1-6",
-        "doubao-lite",
+        "doubao-seed-2-1-pro",
+        "deepseek-v4-flash",
         "agents-a1-free",
         "intern-s2-free",
         "deepseek-chat",
