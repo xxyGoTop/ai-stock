@@ -132,11 +132,23 @@ func (b *Bundle) HotBoards(limit int) ([]HotBoard, error) {
 		limit = 30
 	}
 	query := "pn=1&pz=60&po=1&np=1&fltt=2&invt=2&fid=f3&fs=m%3A90%2Bt%3A2&fields=f12,f14,f3,f109,f128,f136,f140"
+	hosts := append([]string{}, emHosts...)
+	hosts = append(hosts,
+		"https://push2his.eastmoney.com",
+		"https://89.push2.eastmoney.com",
+		"https://7.push2.eastmoney.com",
+	)
 	var payload map[string]interface{}
 	var last error
-	for _, host := range emHosts {
+	for _, host := range hosts {
 		if err := getJSON(b.Client, host+"/api/qt/clist/get?"+query, "https://quote.eastmoney.com/", &payload); err != nil {
 			last = err
+			continue
+		}
+		data, _ := payload["data"].(map[string]interface{})
+		diff, _ := data["diff"].([]interface{})
+		if len(diff) == 0 {
+			last = fmt.Errorf("hot boards empty")
 			continue
 		}
 		last = nil
@@ -166,6 +178,9 @@ func (b *Bundle) HotBoards(limit int) ([]HotBoard, error) {
 		if len(out) >= limit {
 			break
 		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("hot boards empty")
 	}
 	return out, nil
 }

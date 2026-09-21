@@ -14,7 +14,7 @@ func searchTencent(client *http.Client, q string) ([]Stock, error) {
 	if err != nil {
 		return nil, err
 	}
-	text := string(raw)
+	text := decodeMaybeGBK(raw)
 	start := strings.Index(text, `="`)
 	end := strings.LastIndex(text, `"`)
 	if start < 0 || end <= start+2 {
@@ -53,7 +53,7 @@ func fetchTencentQuote(client *http.Client, symbol string) (*Quote, error) {
 	if err != nil {
 		return nil, err
 	}
-	text := strings.TrimSpace(string(raw))
+	text := strings.TrimSpace(decodeMaybeGBK(raw))
 	i := strings.Index(text, `"`)
 	j := strings.LastIndex(text, `"`)
 	if i < 0 || j <= i {

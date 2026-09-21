@@ -88,6 +88,35 @@ func (s *Store) Get(date, kind string) (*Record, error) {
 	return &rec, nil
 }
 
+// Latest 返回某 kind 最近一条有标的的记录（跨日期）。
+func (s *Store) Latest(kind string) (*Record, error) {
+	list, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		if list[i].Kind == kind && len(list[i].Picks) > 0 {
+			rec := list[i]
+			return &rec, nil
+		}
+	}
+	return nil, nil
+}
+
+// LatestAny 按 kinds 优先级取最近一条有标的记录。
+func (s *Store) LatestAny(kinds ...string) (*Record, error) {
+	for _, k := range kinds {
+		rec, err := s.Latest(k)
+		if err != nil {
+			return nil, err
+		}
+		if rec != nil {
+			return rec, nil
+		}
+	}
+	return nil, nil
+}
+
 func (s *Store) List() ([]Record, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

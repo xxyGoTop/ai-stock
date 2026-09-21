@@ -248,6 +248,13 @@ func (s *Service) runScreening() (*ChatResponse, error) {
 	})
 	raw, err := s.py.Screening(payload)
 	if err != nil {
+		if cached := s.cachedPicksReply("screening", "今日选股", []string{"screening", "recommend", "intraday"}); cached != nil {
+			cached.Reply = "实时选股暂不可用（行情源繁忙）：" + err.Error() + "。先展示最近一次选股/推荐记录。"
+			if len(cached.Blocks) > 0 && cached.Blocks[0].Type == "text" {
+				cached.Blocks[0].Text = cached.Reply
+			}
+			return cached, nil
+		}
 		return &ChatResponse{
 			Reply:  "选股服务暂不可用：" + err.Error() + "。可先看「今日热点」或「盘中推荐」。",
 			Intent: "screening",
@@ -265,12 +272,29 @@ func (s *Service) runScreening() (*ChatResponse, error) {
 		picks = picks[:30]
 		result["picks"] = picks
 	}
-	reply := fmt.Sprintf("五算法选股完成：扫描 %.0f 只，列出前 %d 只达标标的（共达标 %.0f）。已写入今日选股记录，可在设置中查看。", scanned, len(picks), qualified)
-	if len(picks) == 0 {
-		reply = "本轮扫描没有达标标的，可以稍后再扫，或先看热点板块领涨股。"
-	} else {
-		s.saveScreeningRecord(picks, reply)
+	if scanned == 0 || len(picks) == 0 {
+		if cached := s.cachedPicksReply("screening", "今日选股", []string{"screening", "recommend", "intraday"}); cached != nil {
+			cached.Reply = "本轮实时扫描无结果（东财列表接口可能暂不可达）。先展示最近一次选股/推荐记录，行情恢复后再扫。"
+			if len(cached.Blocks) > 0 && cached.Blocks[0].Type == "text" {
+				cached.Blocks[0].Text = cached.Reply
+			}
+			return cached, nil
+		}
+		reply := "本轮扫描没有达标标的，可以稍后再扫，或先看热点板块领涨股。"
+		if scanned == 0 {
+			reply = "选股扫描未能拉到候选池（行情列表源暂不可用）。请稍后再试，或先看「今日热点」。"
+		}
+		return &ChatResponse{
+			Reply:  reply,
+			Intent: "screening",
+			Blocks: []Block{
+				{Type: "text", Text: reply},
+				{Type: "suggestions", Items: []string{"今日热点", "今天行情", "我的自选"}},
+			},
+		}, nil
 	}
+	reply := fmt.Sprintf("五算法选股完成：扫描 %.0f 只，列出前 %d 只达标标的（共达标 %.0f）。已写入今日选股记录，可在设置中查看。", scanned, len(picks), qualified)
+	s.saveScreeningRecord(picks, reply)
 	blocks := []Block{
 		{Type: "text", Text: reply},
 		{Type: "screen_picks", Title: "选股结果", Data: result, Items: picks, Meta: map[string]interface{}{"pageSize": 10}},
@@ -369,11 +393,11 @@ func extractSymbol(msg string) string {
 func (s *Service) recommend(action, _ string) (*ChatResponse, error) {
 	boards, err := s.bundle.HotBoards(40)
 	if err != nil {
-		b, berr := s.BuildBriefing()
-		if berr != nil {
-			return nil, err
+		if b, berr := s.BuildBriefing(); berr == nil {
+			boards = b.Boards
+		} else {
+			boards = nil
 		}
-		boards = b.Boards
 	}
 	picks := picksFromBoards(boards, 30)
 	phase := DetectPhase(time.Now())
@@ -390,10 +414,29 @@ func (s *Service) recommend(action, _ string) (*ChatResponse, error) {
 		phase, title, kind = PhaseReview, "收盘复盘观察", "review"
 	}
 	_ = phase
-	summary := fmt.Sprintf("%s：共 %d 只，来自热门板块领涨股。同日再次生成会覆盖记录。", title, len(picks))
+
 	if len(picks) == 0 {
-		summary = title + "暂时没有足够的板块领涨样本，你可以先看热门板块，或说「帮我选股」。"
-	} else if s.picks != nil {
+		if cached := s.cachedPicksReply(kind, title, []string{kind, "recommend", "intraday", "preopen", "screening"}); cached != nil {
+			cached.Reply = title + "暂时拉不到热门板块领涨股（行情列表源暂不可用）。先展示最近一次推荐/选股记录。"
+			if len(cached.Blocks) > 0 && cached.Blocks[0].Type == "text" {
+				cached.Blocks[0].Text = cached.Reply
+			}
+			return cached, nil
+		}
+		summary := title + "暂时没有足够的板块领涨样本，你可以先看热门板块，或说「帮我选股」。"
+		return &ChatResponse{
+			Reply:  summary,
+			Intent: "recommend",
+			Blocks: []Block{
+				{Type: "text", Text: summary},
+				{Type: "suggestions", Items: []string{"帮我选股", "今日热点", "今天行情"}},
+			},
+			Workspace: &WorkspaceHint{Type: "market", Tab: "overview"},
+		}, nil
+	}
+
+	summary := fmt.Sprintf("%s：共 %d 只，来自热门板块领涨股。同日再次生成会覆盖记录。", title, len(picks))
+	if s.picks != nil {
 		items := make([]dailypicks.Pick, 0, len(picks))
 		for _, p := range picks {
 			items = append(items, dailypicks.Pick{
@@ -404,7 +447,6 @@ func (s *Service) recommend(action, _ string) (*ChatResponse, error) {
 		_ = s.picks.Save(dailypicks.Record{
 			Kind: kind, Title: title, Summary: summary, Picks: items,
 		})
-		// 同时覆盖一份「今日推荐」总表，方便设置页默认查看
 		_ = s.picks.Save(dailypicks.Record{
 			Kind: "recommend", Title: "今日推荐", Summary: summary, Picks: items,
 		})
@@ -419,6 +461,42 @@ func (s *Service) recommend(action, _ string) (*ChatResponse, error) {
 		ws = &WorkspaceHint{Type: "stock", Symbol: picks[0].Symbol, Name: picks[0].Name, Tab: "overview"}
 	}
 	return &ChatResponse{Reply: summary, Intent: "recommend", Blocks: blocks, Workspace: ws}, nil
+}
+
+func (s *Service) cachedPicksReply(intent, title string, kinds []string) *ChatResponse {
+	if s.picks == nil {
+		return nil
+	}
+	rec, err := s.picks.LatestAny(kinds...)
+	if err != nil || rec == nil || len(rec.Picks) == 0 {
+		return nil
+	}
+	items := make([]RecommendPick, 0, len(rec.Picks))
+	for _, p := range rec.Picks {
+		reason := p.Reason
+		if reason == "" {
+			reason = p.PrimaryName
+		}
+		items = append(items, RecommendPick{
+			Symbol: p.Symbol, Name: p.Name, ChangePercent: p.ChangePercent,
+			Reason: reason, Board: p.Board,
+		})
+	}
+	label := title
+	if rec.Title != "" {
+		label = rec.Title
+	}
+	reply := fmt.Sprintf("展示 %s（%s，共 %d 只）。", label, rec.Date, len(items))
+	blocks := []Block{
+		{Type: "text", Text: reply},
+		{Type: "picks", Title: label + " · " + rec.Date, Items: items, Meta: map[string]interface{}{"pageSize": 10, "cached": true, "date": rec.Date}},
+		{Type: "suggestions", Items: []string{"帮我选股", "今日热点", "我的自选"}},
+	}
+	ws := &WorkspaceHint{Type: "market", Tab: "overview"}
+	if len(items) > 0 {
+		ws = &WorkspaceHint{Type: "stock", Symbol: items[0].Symbol, Name: items[0].Name, Tab: "overview"}
+	}
+	return &ChatResponse{Reply: reply, Intent: intent, Blocks: blocks, Workspace: ws}
 }
 
 func analyzePayload(symbol string, req ChatRequest) []byte {
