@@ -235,6 +235,10 @@ a {
   color: var(--accent);
 }
 
+.panel a.ghost {
+  color: #1b1407;
+}
+
 .header-line {
   display: flex;
   justify-content: space-between;
@@ -772,11 +776,12 @@ a {
   border-color: #5a4a28;
 }
 
-.paper-ticket .ticket-row {
+.paper-ticket .ticket-row,
+.trade-plan .ticket-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  align-items: flex-end;
+  align-items: center;
 }
 
 .ticket-row label {

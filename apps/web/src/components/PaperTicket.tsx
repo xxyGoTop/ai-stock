@@ -43,7 +43,7 @@ export default function PaperTicket({ symbol, name, price }: { symbol: string; n
   }
 
   return (
-    <section className="panel paper-ticket">
+    <section className="panel paper-ticket" id="paper-ticket">
       <div className="header-line wrap">
         <h2 className="section-title">模拟下单</h2>
         <span className="muted tiny">仅本地模拟账户，T+1，非实盘</span>
