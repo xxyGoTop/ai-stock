@@ -16,17 +16,37 @@ def call_model(model: dict, context: dict, temperature: float = 0.2, agent_code:
     if provider.get("kind") == "local" or model["code"] == "quant-rules":
         return analyze_quant(context)
 
+    messages = render_messages(agent_code, context)
+    text = complete_text(
+        model,
+        messages,
+        temperature=temperature,
+        json_mode=bool(model.get("jsonMode", True)),
+    )
+    parsed = _parse_json(text)
+    parsed["modelCode"] = model["code"]
+    return parsed
+
+
+def complete_text(
+    model: dict,
+    messages: list[dict],
+    temperature: float = 0.4,
+    json_mode: bool = False,
+) -> str:
+    provider = get_provider(model["providerCode"]) or {}
+    if provider.get("kind") == "local" or model["code"] == "quant-rules":
+        raise RuntimeError("本地规则不支持自由对话")
     key = resolve_key(provider.get("apiKeyRef") or "")
     if not key:
         raise RuntimeError(f"{model['code']} 未配置密钥")
-
     payload = {
         "model": effective_model_name(model),
         "temperature": temperature,
-        "max_tokens": min(int(model.get("maxTokens") or 1024), 2048),
-        "messages": render_messages(agent_code, context),
+        "max_tokens": min(int(model.get("maxTokens") or 2048), 4096),
+        "messages": messages,
     }
-    if model.get("jsonMode", True):
+    if json_mode:
         payload["response_format"] = {"type": "json_object"}
     url = (provider.get("baseUrl") or "").rstrip("/") + "/chat/completions"
     req = urllib.request.Request(
@@ -48,10 +68,7 @@ def call_model(model: dict, context: dict, temperature: float = 0.2, agent_code:
         if is_quota_error(err) or exc.code in (402, 429):
             raise QuotaError(str(err)) from exc
         raise err from exc
-    text = (((body.get("choices") or [{}])[0].get("message") or {}).get("content")) or ""
-    parsed = _parse_json(text)
-    parsed["modelCode"] = model["code"]
-    return parsed
+    return str((((body.get("choices") or [{}])[0].get("message") or {}).get("content")) or "").strip()
 
 
 def _parse_json(text: str) -> dict:

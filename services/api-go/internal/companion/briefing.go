@@ -74,12 +74,18 @@ type WorkspaceHint struct {
 	Tab    string `json:"tab,omitempty"` // overview | kline | analysis | paper
 }
 
+type ChatTurn struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
 type ChatRequest struct {
-	Message     string `json:"message"`
-	Symbol      string `json:"symbol,omitempty"`
-	Action      string `json:"action,omitempty"` // analyze | watch | paper | kline | briefing | recommend
-	ProfileCode string `json:"profileCode,omitempty"`
-	ModelCode   string `json:"modelCode,omitempty"`
+	Message     string     `json:"message"`
+	Symbol      string     `json:"symbol,omitempty"`
+	Action      string     `json:"action,omitempty"` // analyze | watch | paper | kline | briefing | recommend
+	ProfileCode string     `json:"profileCode,omitempty"`
+	ModelCode   string     `json:"modelCode,omitempty"`
+	Messages    []ChatTurn `json:"messages,omitempty"`
 }
 
 type ChatResponse struct {

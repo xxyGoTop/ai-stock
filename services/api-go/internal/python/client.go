@@ -102,6 +102,12 @@ func (c *Client) Analyze(payload json.RawMessage) (json.RawMessage, error) {
 	return dest, err
 }
 
+func (c *Client) Chat(payload json.RawMessage) (json.RawMessage, error) {
+	var dest json.RawMessage
+	err := c.post("/v1/ai/chat", payload, &dest)
+	return dest, err
+}
+
 func (c *Client) DailyNote(symbol string, force bool) (json.RawMessage, error) {
 	var dest json.RawMessage
 	path := "/v1/ai/daily-note?symbol=" + url.QueryEscape(symbol)

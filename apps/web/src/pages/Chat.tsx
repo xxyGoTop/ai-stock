@@ -552,6 +552,10 @@ export default function Chat() {
           action: extra?.action,
           profileCode: chatModel === 'auto' ? 'stock_analysis_ark' : undefined,
           modelCode: chatModel === 'auto' ? undefined : chatModel,
+          messages: nextMsgs.slice(-10).map((m) => ({
+            role: m.role === 'assistant' ? 'assistant' : 'user',
+            content: m.text,
+          })),
         },
         {
           onEvent: (ev) => {
@@ -908,7 +912,7 @@ export default function Chat() {
             placeholder={
               loading
                 ? '运行中可继续输入，发送将中断并开启新一轮…'
-                : '问行情 / 热点 / 选股，或说「分析茅台」「加入自选」「打开K线」'
+                : '直接提问，或说「今天行情」「帮我选股」「分析茅台」'
             }
           />
           <button type="submit" disabled={!input.trim()}>

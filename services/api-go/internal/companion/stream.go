@@ -123,17 +123,7 @@ func (s *Service) ChatStream(ctx context.Context, req ChatRequest, emit EmitFunc
 	case "watch_anomaly", "anomaly":
 		res, err = s.streamAnomalies(ctx, emit, plan)
 	default:
-		res = &ChatResponse{
-			Reply:  "我可以帮你看行情、热点、选股，分析个股，加入自选/模拟，或打开 K 线。",
-			Intent: "help",
-			Blocks: []Block{{
-				Type:  "suggestions",
-				Title: "试试这些",
-				Items: []string{"今天行情", "今日热点", "帮我选股", "盘中推荐", "我的自选", "分析茅台"},
-			}},
-			Workspace: &WorkspaceHint{Type: "empty"},
-		}
-		s.emitStaticRun(emit, plan, res, nil)
+		res, err = s.streamChat(ctx, emit, plan, req)
 	}
 
 	if err != nil {
@@ -206,7 +196,7 @@ func planForAction(action string) []PlanStep {
 	default:
 		return []PlanStep{
 			{ID: "think", Title: "理解问题", Status: "pending"},
-			{ID: "tool", Title: "调用工具", Status: "pending"},
+			{ID: "llm", Title: "调用对话模型", Status: "pending"},
 			{ID: "render", Title: "整理回复", Status: "pending"},
 		}
 	}
@@ -279,6 +269,30 @@ func splitReply(text string) []string {
 		return []string{text}
 	}
 	return out
+}
+
+func (s *Service) streamChat(ctx context.Context, emit EmitFunc, plan []PlanStep, req ChatRequest) (*ChatResponse, error) {
+	plan = markPlan(emit, plan, "think", "running")
+	toolStart(emit, "understand", "理解问题")
+	toolResult(emit, "understand", "理解问题", true, "自由问答", nil, "")
+	if aborted(ctx) {
+		return nil, ctx.Err()
+	}
+	plan = markPlan(emit, plan, "llm", "running")
+	toolStart(emit, "llm_chat", "调用对话模型")
+	res, err := s.modelChat(req)
+	if err != nil {
+		toolResult(emit, "llm_chat", "调用对话模型", false, "", nil, err.Error())
+		return res, err
+	}
+	toolResult(emit, "llm_chat", "调用对话模型", true, "已生成回复", nil, "")
+	plan = markPlan(emit, plan, "render", "done")
+	if res != nil {
+		for _, b := range res.Blocks {
+			emitBlock(emit, b)
+		}
+	}
+	return res, nil
 }
 
 func (s *Service) emitStaticRun(emit EmitFunc, plan []PlanStep, res *ChatResponse, err error) {

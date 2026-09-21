@@ -88,17 +88,42 @@ func (s *Service) Chat(req ChatRequest) (*ChatResponse, error) {
 		if looksLikeRecommend(msg) {
 			return s.recommend("recommend", msg)
 		}
+		return s.modelChat(req)
+	}
+}
+
+func (s *Service) modelChat(req ChatRequest) (*ChatResponse, error) {
+	payload, _ := json.Marshal(map[string]interface{}{
+		"message":   strings.TrimSpace(req.Message),
+		"messages":  req.Messages,
+		"modelCode": strings.TrimSpace(req.ModelCode),
+	})
+	raw, err := s.py.Chat(payload)
+	if err != nil {
 		return &ChatResponse{
-			Reply:  "我可以帮你看行情、热点、选股，分析个股，加入自选/模拟，或打开 K 线。",
-			Intent: "help",
-			Blocks: []Block{{
-				Type:  "suggestions",
-				Title: "试试这些",
-				Items: []string{"今天行情", "今日热点", "帮我选股", "盘中推荐", "我的自选", "分析茅台"},
-			}},
-			Workspace: &WorkspaceHint{Type: "empty"},
+			Reply:  "对话模型暂时不可用：" + err.Error() + "。也可以直接说「今天行情」「帮我选股」或「分析茅台」。",
+			Intent: "chat",
+			Blocks: []Block{{Type: "suggestions", Items: []string{"今天行情", "帮我选股", "分析茅台"}}},
 		}, nil
 	}
+	var data struct {
+		Reply     string `json:"reply"`
+		ModelCode string `json:"modelCode"`
+	}
+	if err := json.Unmarshal(raw, &data); err != nil || strings.TrimSpace(data.Reply) == "" {
+		return &ChatResponse{
+			Reply:  "模型没有返回内容，换一句再问，或说「分析茅台」。",
+			Intent: "chat",
+		}, nil
+	}
+	return &ChatResponse{
+		Reply:  strings.TrimSpace(data.Reply),
+		Intent: "chat",
+		Blocks: []Block{
+			{Type: "suggestions", Title: "也可以", Items: []string{"今天行情", "今日热点", "帮我选股", "分析茅台"}},
+		},
+		Workspace: &WorkspaceHint{Type: "empty"},
+	}, nil
 }
 
 func detectIntent(msg, symbol string) string {

@@ -1,0 +1,9 @@
+{
+  "code": "companion_chat",
+  "name": "投研对话",
+  "task": "companion_chat",
+  "role": "analyst",
+  "version": "1.0",
+  "enabled": true,
+  "description": "对话问答：解释行情、指标和模拟交易，不编造实时数字"
+}

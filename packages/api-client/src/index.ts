@@ -163,13 +163,21 @@ export function companionChat(body: {
   action?: string
   profileCode?: string
   modelCode?: string
+  messages?: { role: string; content: string }[]
 }) {
   return post<CompanionChatResponse>('/ai/companion/chat', body)
 }
 
 /** Agent Run SSE：边跑边推 research.plan / tool.* / block / message.delta */
 export async function companionChatStream(
-  body: { message?: string; symbol?: string; action?: string; profileCode?: string; modelCode?: string },
+  body: {
+    message?: string
+    symbol?: string
+    action?: string
+    profileCode?: string
+    modelCode?: string
+    messages?: { role: string; content: string }[]
+  },
   handlers: {
     onEvent: (ev: AgentStreamEvent) => void
     signal?: AbortSignal
