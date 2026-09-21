@@ -2,6 +2,8 @@ import type {
   AgentPrompt,
   AlgorithmMeta,
   AnalysisProfile,
+  AnomalyRules,
+  AnomalyRulesConfig,
   AnomalyScan,
   ApiResponse,
   CompanionBriefing,
@@ -121,6 +123,18 @@ export function getWatchlist(category?: string) {
 
 export function getWatchAnomalies() {
   return get<AnomalyScan>('/watchlist/anomalies')
+}
+
+export function getAnomalyRules() {
+  return get<AnomalyRulesConfig>('/watchlist/anomaly-rules')
+}
+
+export function saveAnomalyRules(rules: AnomalyRules) {
+  return patch<AnomalyRulesConfig>('/watchlist/anomaly-rules', rules)
+}
+
+export function resetAnomalyRules() {
+  return patch<AnomalyRulesConfig>('/watchlist/anomaly-rules?reset=1', {})
 }
 
 export function getTodayOps() {

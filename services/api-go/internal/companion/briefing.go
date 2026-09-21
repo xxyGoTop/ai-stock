@@ -100,10 +100,25 @@ type Service struct {
 	py     *python.Client
 	watch  *watchlist.Store
 	picks  *dailypicks.Store
+	rules  *RulesStore
 }
 
 func New(bundle *provider.Bundle, py *python.Client, watch *watchlist.Store, picks *dailypicks.Store) *Service {
-	return &Service{bundle: bundle, py: py, watch: watch, picks: picks}
+	return &Service{bundle: bundle, py: py, watch: watch, picks: picks, rules: NewRulesStore()}
+}
+
+func (s *Service) GetAnomalyRules() AnomalyRules {
+	if s.rules == nil {
+		return DefaultAnomalyRules()
+	}
+	return s.rules.Get()
+}
+
+func (s *Service) SaveAnomalyRules(rules AnomalyRules) (AnomalyRules, error) {
+	if s.rules == nil {
+		s.rules = NewRulesStore()
+	}
+	return s.rules.Save(rules)
 }
 
 func DetectPhase(now time.Time) SessionPhase {

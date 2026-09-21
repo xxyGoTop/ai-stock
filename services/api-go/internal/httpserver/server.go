@@ -75,6 +75,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/paper/orders", s.paperOrders)
 	mux.HandleFunc("/api/v1/paper/positions", s.paperPositions)
 	mux.HandleFunc("/api/v1/paper/reset", s.paperReset)
+	mux.HandleFunc("/api/v1/watchlist/anomaly-rules", s.watchAnomalyRules)
 	mux.HandleFunc("/api/v1/watchlist/anomalies", s.watchAnomalies)
 	mux.HandleFunc("/api/v1/watchlist/today-ops", s.watchTodayOps)
 	mux.HandleFunc("/api/v1/watchlist/items/", s.watchItem)
@@ -400,6 +401,35 @@ func (s *Server) watchlist(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	response.OK(w, map[string]interface{}{"items": items})
+}
+
+func (s *Server) watchAnomalyRules(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		response.OK(w, map[string]interface{}{
+			"rules":    s.comp.GetAnomalyRules(),
+			"defaults": companion.DefaultAnomalyRules(),
+		})
+	case http.MethodPatch:
+		body := companion.DefaultAnomalyRules()
+		if r.URL.Query().Get("reset") != "1" {
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				response.Error(w, http.StatusBadRequest, "invalid json")
+				return
+			}
+		}
+		saved, err := s.comp.SaveAnomalyRules(body)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		response.OK(w, map[string]interface{}{
+			"rules":    saved,
+			"defaults": companion.DefaultAnomalyRules(),
+		})
+	default:
+		response.Error(w, http.StatusMethodNotAllowed, "GET or PATCH")
+	}
 }
 
 func (s *Server) watchAnomalies(w http.ResponseWriter, r *http.Request) {

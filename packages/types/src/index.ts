@@ -432,6 +432,27 @@ export interface WatchAnomaly {
   liftText?: string
 }
 
+export interface AnomalyRules {
+  changeMild: number
+  changeStrong: number
+  volumeRatioMild: number
+  volumeRatioStrong: number
+  turnoverMild: number
+  fundMildYi: number
+  fundStrongYi: number
+  fundPctMild: number
+  fundPctStrong: number
+  superMildYi: number
+  liftMild: number
+  liftNotable: number
+  liftStrong: number
+}
+
+export interface AnomalyRulesConfig {
+  rules: AnomalyRules
+  defaults: AnomalyRules
+}
+
 export interface AnomalyScan {
   asOf: string
   count: number

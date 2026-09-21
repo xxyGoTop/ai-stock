@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { listAgents, listAnalysisProfiles, listDailyPicks, listLlmModels } from '@ai-stock/api-client'
-import type { AgentPrompt, AnalysisProfile, DailyPickRecord, LlmModel } from '@ai-stock/types'
+import { getAnomalyRules, listAgents, listAnalysisProfiles, listDailyPicks, listLlmModels, resetAnomalyRules, saveAnomalyRules } from '@ai-stock/api-client'
+import type { AgentPrompt, AnalysisProfile, AnomalyRules, DailyPickRecord, LlmModel } from '@ai-stock/types'
 import PaginatedPicks from '../components/PaginatedPicks'
 import { PROFILE_KEY } from '../lib/cache'
 
@@ -22,14 +22,18 @@ export default function Settings() {
   const [activeKey, setActiveKey] = useState('')
   const [current, setCurrent] = useState(localStorage.getItem(PROFILE_KEY) || 'stock_analysis_default')
   const [error, setError] = useState('')
+  const [rules, setRules] = useState<AnomalyRules | null>(null)
+  const [ruleMsg, setRuleMsg] = useState('')
+  const [ruleBusy, setRuleBusy] = useState(false)
 
   useEffect(() => {
-    Promise.all([listAnalysisProfiles(), listLlmModels(), listAgents(), listDailyPicks()])
-      .then(([p, m, a, picks]) => {
+    Promise.all([listAnalysisProfiles(), listLlmModels(), listAgents(), listDailyPicks(), getAnomalyRules()])
+      .then(([p, m, a, picks, cfg]) => {
         setProfiles(p)
         setModels(m)
         setAgents(a)
         setRecords(picks)
+        setRules(cfg.rules)
         if (picks.length) {
           const prefer =
             picks.find((r) => r.kind === 'recommend') ||
@@ -110,6 +114,88 @@ export default function Settings() {
               </div>
             )}
           </>
+        )}
+      </section>
+
+      <section className="panel" style={{ marginTop: 16 }}>
+        <h2 className="section-title">自选异动阈值</h2>
+        <p className="muted">
+          对话「异动」和页内提醒共用这套规则。资金单位是亿元。改完立即生效，文件在服务端{' '}
+          <code>services/api-go/data/anomaly_rules.json</code>。
+        </p>
+        {rules ? (
+          <>
+            <div className="rule-grid">
+              {(
+                [
+                  ['changeMild', '涨跌幅轻度 %', 0.1],
+                  ['changeStrong', '涨跌幅强烈 %', 0.1],
+                  ['volumeRatioMild', '量比轻度', 0.1],
+                  ['volumeRatioStrong', '量比强烈', 0.1],
+                  ['turnoverMild', '换手轻度 %', 0.1],
+                  ['fundMildYi', '主力资金轻度 亿', 0.01],
+                  ['fundStrongYi', '主力资金强烈 亿', 0.01],
+                  ['fundPctMild', '资金占成交轻度 %', 0.1],
+                  ['fundPctStrong', '资金占成交强烈 %', 0.1],
+                  ['superMildYi', '超大单轻度 亿', 0.01],
+                  ['liftMild', '拉升轻度 %', 0.1],
+                  ['liftNotable', '拉升明显 %', 0.1],
+                  ['liftStrong', '拉升强烈 %', 0.1],
+                ] as [keyof AnomalyRules, string, number][]
+              ).map(([key, label, step]) => (
+                <label key={key} className="rule-field">
+                  <span>{label}</span>
+                  <input
+                    type="number"
+                    step={step}
+                    value={rules[key]}
+                    onChange={(e) => setRules({ ...rules, [key]: Number(e.target.value) })}
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="action-row" style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                className="ghost-btn"
+                disabled={ruleBusy}
+                onClick={() => {
+                  setRuleBusy(true)
+                  setRuleMsg('')
+                  saveAnomalyRules(rules)
+                    .then((cfg) => {
+                      setRules(cfg.rules)
+                      setRuleMsg('已保存，下次扫描异动按新阈值。')
+                    })
+                    .catch((err) => setRuleMsg(err instanceof Error ? err.message : '保存失败'))
+                    .finally(() => setRuleBusy(false))
+                }}
+              >
+                {ruleBusy ? '保存中…' : '保存阈值'}
+              </button>
+              <button
+                type="button"
+                className="ghost-btn"
+                disabled={ruleBusy}
+                onClick={() => {
+                  setRuleBusy(true)
+                  setRuleMsg('')
+                  resetAnomalyRules()
+                    .then((cfg) => {
+                      setRules(cfg.rules)
+                      setRuleMsg('已恢复默认阈值。')
+                    })
+                    .catch((err) => setRuleMsg(err instanceof Error ? err.message : '重置失败'))
+                    .finally(() => setRuleBusy(false))
+                }}
+              >
+                恢复默认
+              </button>
+            </div>
+            {ruleMsg ? <p className="muted">{ruleMsg}</p> : null}
+          </>
+        ) : (
+          <p className="muted">正在加载异动阈值…</p>
         )}
       </section>
 
