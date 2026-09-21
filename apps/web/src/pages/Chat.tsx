@@ -132,7 +132,9 @@ export default function Chat() {
   const [series, setSeries] = useState<IndicatorPoint[]>([])
   const [stockNews, setStockNews] = useState<StockNewsFeed | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const streamInnerRef = useRef<HTMLDivElement>(null)
   const pinBottomRef = useRef(true)
+  const ignoreScrollRef = useRef(false)
   const persistRef = useRef(true)
   const abortRef = useRef<AbortController | null>(null)
   const runGenRef = useRef(0)
@@ -260,17 +262,36 @@ export default function Chat() {
     refreshList()
   }, [messages, workspace, briefing, phaseLabel])
 
-  useEffect(() => {
-    const el = listRef.current
-    if (!el || !pinBottomRef.current) return
-    el.scrollTo({ top: el.scrollHeight, behavior: loading ? 'auto' : 'smooth' })
-  }, [messages, loading, liveProgress, liveText, liveBlocks, liveTools, agentState])
-
-  function nearBottom(el: HTMLDivElement, slack = 96) {
+  function nearBottom(el: HTMLDivElement, slack = 120) {
     return el.scrollHeight - el.scrollTop - el.clientHeight < slack
   }
 
+  function stickToBottom(force = false) {
+    const el = listRef.current
+    if (!el) return
+    if (!force && !pinBottomRef.current) return
+    ignoreScrollRef.current = true
+    el.scrollTop = el.scrollHeight
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight
+      ignoreScrollRef.current = false
+    })
+  }
+
+  useEffect(() => {
+    stickToBottom()
+  }, [messages, loading, liveProgress, liveText, liveBlocks, liveTools, agentState])
+
+  useEffect(() => {
+    const inner = streamInnerRef.current
+    if (!inner) return
+    const ro = new ResizeObserver(() => stickToBottom())
+    ro.observe(inner)
+    return () => ro.disconnect()
+  }, [])
+
   function onChatScroll() {
+    if (ignoreScrollRef.current) return
     const el = listRef.current
     if (!el) return
     const pinned = nearBottom(el)
@@ -279,11 +300,9 @@ export default function Chat() {
   }
 
   function jumpToBottom() {
-    const el = listRef.current
-    if (!el) return
     pinBottomRef.current = true
     setShowJump(false)
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    stickToBottom(true)
   }
 
   // 自选异动：页内主动推送（去重指纹）
@@ -528,6 +547,8 @@ export default function Chat() {
     const gen = ++runGenRef.current
     const ac = new AbortController()
     abortRef.current = ac
+    pinBottomRef.current = true
+    setShowJump(false)
 
     let nextMsgs = messages
     if (text) {
@@ -856,6 +877,7 @@ export default function Chat() {
 
         <div className="chat-stream-wrap">
         <div className="chat-stream" ref={listRef} onScroll={onChatScroll}>
+          <div className="chat-stream-inner" ref={streamInnerRef}>
           {messages.map((m) => (
             <article key={m.id} className={`chat-bubble ${m.role}${m.proactive ? ' proactive' : ''}`}>
               <div className="chat-role">
@@ -896,6 +918,7 @@ export default function Chat() {
               </div>
             </article>
           )}
+          </div>
         </div>
         {showJump && (
           <button type="button" className="chat-jump" onClick={jumpToBottom}>
