@@ -1,6 +1,7 @@
 import type { AlgorithmMeta, HotFeed, ScreenResult, Stock, StockAnalysis } from '@ai-stock/types'
 
 export const PROFILE_KEY = 'ai-stock.analysisProfile'
+export const CHAT_MODEL_KEY = 'ai-stock.chatModel'
 
 export type ScreeningCache = {
   algos: AlgorithmMeta[]

@@ -6,7 +6,7 @@ import urllib.request
 
 from prompts.loader import render_messages
 
-from .config import get_provider, resolve_key
+from .config import effective_model_name, get_provider, resolve_key
 from .quant_analyst import analyze_quant
 from .quota import QuotaError, is_quota_error
 
@@ -21,7 +21,7 @@ def call_model(model: dict, context: dict, temperature: float = 0.2, agent_code:
         raise RuntimeError(f"{model['code']} 未配置密钥")
 
     payload = {
-        "model": model["modelName"],
+        "model": effective_model_name(model),
         "temperature": temperature,
         "max_tokens": min(int(model.get("maxTokens") or 1024), 2048),
         "messages": render_messages(agent_code, context),

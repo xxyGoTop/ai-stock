@@ -75,9 +75,11 @@ type WorkspaceHint struct {
 }
 
 type ChatRequest struct {
-	Message string `json:"message"`
-	Symbol  string `json:"symbol,omitempty"`
-	Action  string `json:"action,omitempty"` // analyze | watch | paper | kline | briefing | recommend
+	Message     string `json:"message"`
+	Symbol      string `json:"symbol,omitempty"`
+	Action      string `json:"action,omitempty"` // analyze | watch | paper | kline | briefing | recommend
+	ProfileCode string `json:"profileCode,omitempty"`
+	ModelCode   string `json:"modelCode,omitempty"`
 }
 
 type ChatResponse struct {

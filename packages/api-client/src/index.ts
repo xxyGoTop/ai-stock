@@ -86,8 +86,8 @@ export function listAgents() {
   return get<{ items: AgentPrompt[] }>('/agents').then((d) => d.items)
 }
 
-export function analyzeStock(symbol: string, profileCode?: string) {
-  return post<StockAnalysis>('/ai/analyze', { symbol, profileCode })
+export function analyzeStock(symbol: string, profileCode?: string, modelCode?: string) {
+  return post<StockAnalysis>('/ai/analyze', { symbol, profileCode, modelCode })
 }
 
 export function getHotFeed(limit = 15) {
@@ -157,13 +157,19 @@ export function getCompanionBriefing() {
   return get<CompanionBriefing>('/ai/companion/briefing')
 }
 
-export function companionChat(body: { message?: string; symbol?: string; action?: string }) {
+export function companionChat(body: {
+  message?: string
+  symbol?: string
+  action?: string
+  profileCode?: string
+  modelCode?: string
+}) {
   return post<CompanionChatResponse>('/ai/companion/chat', body)
 }
 
 /** Agent Run SSE：边跑边推 research.plan / tool.* / block / message.delta */
 export async function companionChatStream(
-  body: { message?: string; symbol?: string; action?: string },
+  body: { message?: string; symbol?: string; action?: string; profileCode?: string; modelCode?: string },
   handlers: {
     onEvent: (ev: AgentStreamEvent) => void
     signal?: AbortSignal

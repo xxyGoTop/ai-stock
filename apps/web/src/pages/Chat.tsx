@@ -8,6 +8,7 @@ import {
   getStockNews,
   getWatchAnomalies,
   getTodayOps,
+  listLlmModels,
 } from '@ai-stock/api-client'
 import type {
   AgentRunState,
@@ -18,6 +19,7 @@ import type {
   CompanionWorkspace,
   IndicatorPoint,
   KlineBar,
+  LlmModel,
   Quote,
   StockNewsFeed,
 } from '@ai-stock/types'
@@ -48,6 +50,7 @@ import {
   type Conversation,
   type ResearchStep,
 } from '../lib/chatSession'
+import { CHAT_MODEL_KEY } from '../lib/cache'
 
 const QUICK = [
   { label: '行情', message: '今天行情', action: 'market' },
@@ -141,7 +144,20 @@ export default function Chat() {
   const [wsWidth, setWsWidth] = useState(layoutInit.wsWidth)
   const [fullscreen, setFullscreen] = useState(layoutInit.fullscreen)
   const [showJump, setShowJump] = useState(false)
+  const [chatModels, setChatModels] = useState<LlmModel[]>([])
+  const [chatModel, setChatModel] = useState(() => localStorage.getItem(CHAT_MODEL_KEY) || 'auto')
   const dragRef = useRef<{ startX: number; startW: number } | null>(null)
+
+  useEffect(() => {
+    listLlmModels()
+      .then((items) => setChatModels(items.filter((m) => m.enabled)))
+      .catch(() => setChatModels([]))
+  }, [])
+
+  function chooseChatModel(code: string) {
+    setChatModel(code)
+    localStorage.setItem(CHAT_MODEL_KEY, code)
+  }
 
   function refreshList() {
     setConversations(listConversations())
@@ -529,6 +545,8 @@ export default function Chat() {
           message: text || extra?.action || '',
           symbol: extra?.symbol,
           action: extra?.action,
+          profileCode: chatModel === 'auto' ? 'stock_analysis_ark' : undefined,
+          modelCode: chatModel === 'auto' ? undefined : chatModel,
         },
         {
           onEvent: (ev) => {
@@ -878,6 +896,20 @@ export default function Chat() {
         </div>
 
         <form className="chat-composer" onSubmit={onSubmit}>
+          <select
+            className="chat-model"
+            value={chatModel}
+            onChange={(e) => chooseChatModel(e.target.value)}
+            title="对话分析使用的模型"
+          >
+            <option value="auto">火山方舟 · 自动回退</option>
+            {chatModels.map((m) => (
+              <option key={m.code} value={m.code} disabled={!m.ready || m.exhausted}>
+                {m.name || m.code}
+                {!m.ready ? '（缺密钥）' : m.exhausted ? '（额度用尽）' : ''}
+              </option>
+            ))}
+          </select>
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}

@@ -7,7 +7,7 @@ from quant.screening.engine import build_rps_maps, rps_of
 from quant.screening.market import fetch_klines, fetch_market_returns, fetch_quote
 
 
-def analyze_stock(symbol: str, profile_code: str | None = None) -> dict:
+def analyze_stock(symbol: str, profile_code: str | None = None, model_code: str | None = None) -> dict:
     symbol = "".join(ch for ch in str(symbol) if ch.isdigit()).zfill(6)
     stock = _quote(symbol)
     klines = fetch_klines(symbol, 260)
@@ -44,7 +44,7 @@ def analyze_stock(symbol: str, profile_code: str | None = None) -> dict:
             for h in hits
         ],
     }
-    routed = run_profile(pack, profile_code)
+    routed = run_profile(pack, profile_code, model_code)
     return {
         "type": "stock_analysis",
         "symbol": symbol,

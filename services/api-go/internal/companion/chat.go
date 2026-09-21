@@ -46,7 +46,7 @@ func (s *Service) Chat(req ChatRequest) (*ChatResponse, error) {
 	case "recommend", "preopen", "intraday", "close_auction", "review":
 		return s.recommend(action, msg)
 	case "analyze":
-		return s.analyzeStock(symbol, msg)
+		return s.analyzeStock(symbol, msg, req)
 	case "watch":
 		return s.addWatch(symbol, msg)
 	case "unwatch":
@@ -74,7 +74,7 @@ func (s *Service) Chat(req ChatRequest) (*ChatResponse, error) {
 		return s.showTodayOps()
 	default:
 		if symbol != "" && symbol != "000000" {
-			return s.analyzeStock(symbol, msg)
+			return s.analyzeStock(symbol, msg, req)
 		}
 		if looksLikeHot(msg) {
 			return s.hotFeed()
@@ -396,7 +396,19 @@ func (s *Service) recommend(action, _ string) (*ChatResponse, error) {
 	return &ChatResponse{Reply: summary, Intent: "recommend", Blocks: blocks, Workspace: ws}, nil
 }
 
-func (s *Service) analyzeStock(symbol, msg string) (*ChatResponse, error) {
+func analyzePayload(symbol string, req ChatRequest) []byte {
+	body := map[string]string{"symbol": symbol}
+	if strings.TrimSpace(req.ProfileCode) != "" {
+		body["profileCode"] = strings.TrimSpace(req.ProfileCode)
+	}
+	if strings.TrimSpace(req.ModelCode) != "" {
+		body["modelCode"] = strings.TrimSpace(req.ModelCode)
+	}
+	raw, _ := json.Marshal(body)
+	return raw
+}
+
+func (s *Service) analyzeStock(symbol, msg string, req ChatRequest) (*ChatResponse, error) {
 	if symbol == "" || symbol == "000000" {
 		// 尝试搜索中文名
 		q := strings.TrimSpace(msg)
@@ -444,8 +456,7 @@ func (s *Service) analyzeStock(symbol, msg string) (*ChatResponse, error) {
 	}
 
 	// LLM 分析（无 key 时会走 quant-rules）
-	payload, _ := json.Marshal(map[string]string{"symbol": symbol})
-	if raw, err := s.py.Analyze(payload); err == nil && len(raw) > 0 {
+	if raw, err := s.py.Analyze(analyzePayload(symbol, req)); err == nil && len(raw) > 0 {
 		var analysis interface{}
 		if json.Unmarshal(raw, &analysis) == nil {
 			blocks = append(blocks, Block{Type: "analysis", Title: "AI 解读", Data: analysis, Symbol: symbol})

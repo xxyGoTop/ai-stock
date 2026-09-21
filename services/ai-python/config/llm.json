@@ -27,11 +27,19 @@
       "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
       "apiKeyRef": "env:LLM_QWEN_KEY",
       "enabled": true
+    },
+    {
+      "code": "volcengine_ark",
+      "kind": "openai_compatible",
+      "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
+      "apiKeyRef": "env:LLM_ARK_KEY|ARK_API_KEY",
+      "enabled": true
     }
   ],
   "models": [
     {
       "code": "quant-rules",
+      "label": "量化规则",
       "providerCode": "quant-local",
       "modelName": "quant-rules",
       "roles": ["analyst", "judge"],
@@ -43,6 +51,7 @@
     },
     {
       "code": "agents-a1-free",
+      "label": "Agents A1",
       "providerCode": "aihubmix",
       "modelName": "agents-a1-free",
       "roles": ["analyst", "screener", "planner", "judge"],
@@ -54,6 +63,7 @@
     },
     {
       "code": "intern-s2-free",
+      "label": "Intern S2",
       "providerCode": "aihubmix",
       "modelName": "intern-s2-free",
       "roles": ["analyst", "judge"],
@@ -65,6 +75,7 @@
     },
     {
       "code": "deepseek-chat",
+      "label": "DeepSeek",
       "providerCode": "deepseek",
       "modelName": "deepseek-chat",
       "roles": ["analyst", "screener", "judge"],
@@ -75,12 +86,38 @@
     },
     {
       "code": "qwen-plus",
+      "label": "通义千问",
       "providerCode": "openai_compatible",
       "modelName": "qwen-plus",
       "roles": ["analyst", "judge"],
       "maxTokens": 2048,
       "timeoutMs": 90000,
       "costTier": "mid",
+      "enabled": true
+    },
+    {
+      "code": "doubao-seed-1-6",
+      "label": "豆包 Seed 1.6",
+      "providerCode": "volcengine_ark",
+      "modelName": "doubao-seed-1-6-251015",
+      "modelNameRef": "env:LLM_ARK_MODEL|ARK_MODEL",
+      "roles": ["analyst", "screener", "planner", "judge"],
+      "maxTokens": 2048,
+      "timeoutMs": 90000,
+      "costTier": "mid",
+      "jsonMode": false,
+      "enabled": true
+    },
+    {
+      "code": "doubao-lite",
+      "label": "豆包 Lite",
+      "providerCode": "volcengine_ark",
+      "modelName": "doubao-1-5-lite-32k-250115",
+      "roles": ["analyst", "screener", "judge"],
+      "maxTokens": 2048,
+      "timeoutMs": 60000,
+      "costTier": "low",
+      "jsonMode": false,
       "enabled": true
     }
   ],
@@ -109,6 +146,32 @@
         { "modelCode": "quant-rules", "weight": 1, "temperature": 0 }
       ],
       "fallback": ["agents-a1-free", "intern-s2-free", "deepseek-chat", "qwen-plus", "quant-rules"],
+      "enabled": true
+    },
+    {
+      "code": "stock_analysis_ark",
+      "name": "火山方舟",
+      "task": "stock_analysis",
+      "agentCode": "stock_analyst",
+      "mode": "fallback",
+      "models": [
+        { "modelCode": "doubao-seed-1-6", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "doubao-lite", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "agents-a1-free", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "intern-s2-free", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "deepseek-chat", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "qwen-plus", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "quant-rules", "weight": 1, "temperature": 0 }
+      ],
+      "fallback": [
+        "doubao-seed-1-6",
+        "doubao-lite",
+        "agents-a1-free",
+        "intern-s2-free",
+        "deepseek-chat",
+        "qwen-plus",
+        "quant-rules"
+      ],
       "enabled": true
     },
     {

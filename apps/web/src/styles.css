@@ -1729,13 +1729,23 @@ body.layout-fullscreen .app.companion-app {
   border-top: 1px solid var(--line);
 }
 
-.chat-composer input {
-  flex: 1;
+.chat-composer input,
+.chat-composer select.chat-model {
   background: #0d1526;
   border: 1px solid var(--line);
   border-radius: 10px;
   color: var(--text);
   padding: 10px 12px;
+}
+
+.chat-composer input {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-composer select.chat-model {
+  flex: 0 0 168px;
+  max-width: 42%;
 }
 
 .chat-composer button {

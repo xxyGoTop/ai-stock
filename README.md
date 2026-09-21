@@ -138,14 +138,16 @@ Go API :18080
 | `LLM_AIHUBMIX_KEY` | AIHubMix，也认 `AIHUBMIX_API_KEY` |
 | `LLM_DEEPSEEK_KEY` | DeepSeek |
 | `LLM_QWEN_KEY` | 通义千问兼容接口 |
+| `LLM_ARK_KEY` | 火山方舟，也认 `ARK_API_KEY` |
+| `LLM_ARK_MODEL` | 可选，覆盖豆包 Seed 的 Model ID / 推理接入点 `ep-xxx` |
 
-不配密钥也能用内置 `quant-rules`。默认回退链：
+不配密钥也能用内置 `quant-rules`。对话默认走火山方舟 [Chat API](https://www.volcengine.com/docs/82379/1112500)（`https://ark.cn-beijing.volces.com/api/v3`）：
 
 ```text
-agents-a1-free → intern-s2-free → deepseek-chat → qwen-plus → quant-rules
+doubao-seed-1-6 → doubao-lite → agents-a1-free → intern-s2-free → deepseek-chat → qwen-plus → quant-rules
 ```
 
-空 `{}`、429、额度不足时跳过约 6 小时再试下一个。设置页 Profile：快速 / AIHubMix 回退 / 多模型综合。
+空 `{}`、429、额度不足时跳过约 6 小时再试下一个。对话输入框可切模型。设置页 Profile：快速 / AIHubMix 回退 / 火山方舟 / 多模型综合。
 
 ## Agent Prompt
 

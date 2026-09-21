@@ -18,10 +18,13 @@ const MODEL: Record<string, string> = {
   'intern-s2-free': 'Intern S2',
   'deepseek-chat': 'DeepSeek',
   'qwen-plus': '通义千问',
+  'doubao-seed-1-6': '豆包 Seed 1.6',
+  'doubao-lite': '豆包 Lite',
 }
 const PROFILE: Record<string, string> = {
   stock_analysis_fast: '快速',
   stock_analysis_default: 'AIHubMix 回退',
+  stock_analysis_ark: '火山方舟',
   stock_analysis_ensemble: '多模型综合',
 }
 const AGENT: Record<string, string> = {

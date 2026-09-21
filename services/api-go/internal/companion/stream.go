@@ -89,7 +89,7 @@ func (s *Service) ChatStream(ctx context.Context, req ChatRequest, emit EmitFunc
 	case "recommend", "preopen", "intraday", "close_auction", "review":
 		res, err = s.streamRecommend(ctx, emit, plan, action)
 	case "analyze":
-		res, err = s.streamAnalyze(ctx, emit, plan, symbol, msg)
+		res, err = s.streamAnalyze(ctx, emit, plan, symbol, msg, req)
 	case "watch":
 		res, err = s.addWatch(symbol, msg)
 		s.emitStaticRun(emit, plan, res, err)
@@ -470,7 +470,7 @@ func (s *Service) streamScreening(ctx context.Context, emit EmitFunc, plan []Pla
 	return res, nil
 }
 
-func (s *Service) streamAnalyze(ctx context.Context, emit EmitFunc, plan []PlanStep, symbol, msg string) (*ChatResponse, error) {
+func (s *Service) streamAnalyze(ctx context.Context, emit EmitFunc, plan []PlanStep, symbol, msg string, req ChatRequest) (*ChatResponse, error) {
 	if symbol == "" || symbol == "000000" {
 		q := strings.TrimSpace(msg)
 		for _, cut := range []string{"分析", "看看", "研究", "帮我"} {
@@ -580,8 +580,7 @@ func (s *Service) streamAnalyze(ctx context.Context, emit EmitFunc, plan []PlanS
 
 	plan = markPlan(emit, plan, "ai", "running")
 	toolStart(emit, "ai_analyze", "AI 解读")
-	payload, _ := json.Marshal(map[string]string{"symbol": symbol})
-	if raw, err := s.py.Analyze(payload); err == nil && len(raw) > 0 {
+	if raw, err := s.py.Analyze(analyzePayload(symbol, req)); err == nil && len(raw) > 0 {
 		var analysis interface{}
 		if json.Unmarshal(raw, &analysis) == nil {
 			b := Block{Type: "analysis", Title: "AI 解读", Data: analysis, Symbol: symbol}

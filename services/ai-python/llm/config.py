@@ -67,6 +67,16 @@ def get_model(code: str) -> dict | None:
     return next((m for m in models() if m["code"] == code), None)
 
 
+def effective_model_name(model: dict) -> str:
+    ref = str(model.get("modelNameRef") or "")
+    if ref.startswith("env:"):
+        for name in ref[4:].split("|"):
+            val = os.environ.get(name.strip(), "").strip()
+            if val:
+                return val
+    return str(model.get("modelName") or model.get("code") or "")
+
+
 def get_profile(code: str | None) -> dict:
     items = profiles()
     if code:
@@ -100,7 +110,7 @@ def list_models() -> list[dict]:
         out.append(
             {
                 "code": m["code"],
-                "name": m.get("modelName") or m["code"],
+                "name": m.get("label") or m.get("modelName") or m["code"],
                 "providerCode": m["providerCode"],
                 "roles": m.get("roles") or [],
                 "costTier": m.get("costTier"),

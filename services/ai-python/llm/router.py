@@ -10,7 +10,9 @@ from .quota import QuotaError, is_exhausted, is_quota_error, mark_exhausted
 RISK_RANK = {"low": 0, "mid": 1, "high": 2}
 
 
-def run_profile(context: dict, profile_code: str | None = None) -> dict:
+def run_profile(context: dict, profile_code: str | None = None, model_code: str | None = None) -> dict:
+    if model_code:
+        return _run_named_model(context, model_code)
     profile = get_profile(profile_code)
     entries = [e for e in profile.get("models") or [] if (m := get_model(e["modelCode"])) and model_ready(m)]
     if not entries:
@@ -46,6 +48,26 @@ def run_profile(context: dict, profile_code: str | None = None) -> dict:
         if not (packed.get("final") or {}).get("summary"):
             packed["final"] = {**(packed.get("final") or {}), "action": fallback.get("action"), "summary": fallback.get("summary")}
     return packed
+
+
+def _run_named_model(context: dict, model_code: str) -> dict:
+    model = get_model(model_code)
+    profile = {
+        "code": f"model_{model_code}",
+        "name": (model or {}).get("label") or model_code,
+        "task": "stock_analysis",
+        "agentCode": "stock_analyst",
+        "mode": "fallback",
+        "models": [{"modelCode": model_code, "weight": 1, "temperature": 0.2}],
+        "fallback": [model_code, "quant-rules"],
+        "enabled": True,
+    }
+    entries = [e for e in profile["models"] if (m := get_model(e["modelCode"])) and model_ready(m)]
+    if not entries:
+        vote = analyze_quant(context)
+        return _pack(profile, [vote], [vote])
+    votes = [_invoke_or_fallback(entries, profile, context, profile["agentCode"])]
+    return _pack(profile, entries, votes)
 
 
 def _invoke_or_fallback(entries: list[dict], profile: dict, context: dict, agent_code: str | None = None) -> dict:

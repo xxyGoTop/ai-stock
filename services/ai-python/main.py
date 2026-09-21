@@ -36,6 +36,7 @@ def screening(req: ScreenRequest):
 class AnalyzeRequest(BaseModel):
     symbol: str
     profileCode: str | None = None
+    modelCode: str | None = None
 
 
 @app.get("/v1/llm/models")
@@ -56,7 +57,7 @@ def agents():
 @app.post("/v1/ai/analyze")
 def analyze(req: AnalyzeRequest):
     try:
-        return analyze_stock(req.symbol, req.profileCode)
+        return analyze_stock(req.symbol, req.profileCode, req.modelCode)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
