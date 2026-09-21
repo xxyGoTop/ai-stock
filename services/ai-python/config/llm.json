@@ -12,21 +12,21 @@
       "kind": "openai_compatible",
       "baseUrl": "https://aihubmix.com/v1",
       "apiKeyRef": "env:LLM_AIHUBMIX_KEY|AIHUBMIX_API_KEY",
-      "enabled": true
+      "enabled": false
     },
     {
       "code": "deepseek",
       "kind": "openai_compatible",
       "baseUrl": "https://api.deepseek.com",
       "apiKeyRef": "env:LLM_DEEPSEEK_KEY",
-      "enabled": true
+      "enabled": false
     },
     {
       "code": "openai_compatible",
       "kind": "openai_compatible",
       "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
       "apiKeyRef": "env:LLM_QWEN_KEY",
-      "enabled": true
+      "enabled": false
     },
     {
       "code": "volcengine_ark",
@@ -59,7 +59,7 @@
       "timeoutMs": 90000,
       "costTier": "free",
       "jsonMode": false,
-      "enabled": true
+      "enabled": false
     },
     {
       "code": "intern-s2-free",
@@ -71,7 +71,7 @@
       "timeoutMs": 90000,
       "costTier": "free",
       "jsonMode": false,
-      "enabled": true
+      "enabled": false
     },
     {
       "code": "deepseek-chat",
@@ -82,7 +82,7 @@
       "maxTokens": 2048,
       "timeoutMs": 60000,
       "costTier": "low",
-      "enabled": true
+      "enabled": false
     },
     {
       "code": "qwen-plus",
@@ -93,7 +93,7 @@
       "maxTokens": 2048,
       "timeoutMs": 90000,
       "costTier": "mid",
-      "enabled": true
+      "enabled": false
     },
     {
       "code": "doubao-seed-2-1-pro",
@@ -146,7 +146,7 @@
         { "modelCode": "quant-rules", "weight": 1, "temperature": 0 }
       ],
       "fallback": ["agents-a1-free", "intern-s2-free", "deepseek-chat", "qwen-plus", "quant-rules"],
-      "enabled": true
+      "enabled": false
     },
     {
       "code": "stock_analysis_ark",
@@ -157,21 +157,9 @@
       "models": [
         { "modelCode": "doubao-seed-2-1-pro", "weight": 1, "temperature": 0.2 },
         { "modelCode": "deepseek-v4-flash", "weight": 1, "temperature": 0.2 },
-        { "modelCode": "agents-a1-free", "weight": 1, "temperature": 0.2 },
-        { "modelCode": "intern-s2-free", "weight": 1, "temperature": 0.2 },
-        { "modelCode": "deepseek-chat", "weight": 1, "temperature": 0.2 },
-        { "modelCode": "qwen-plus", "weight": 1, "temperature": 0.2 },
         { "modelCode": "quant-rules", "weight": 1, "temperature": 0 }
       ],
-      "fallback": [
-        "doubao-seed-2-1-pro",
-        "deepseek-v4-flash",
-        "agents-a1-free",
-        "intern-s2-free",
-        "deepseek-chat",
-        "qwen-plus",
-        "quant-rules"
-      ],
+      "fallback": ["doubao-seed-2-1-pro", "deepseek-v4-flash", "quant-rules"],
       "enabled": true
     },
     {
@@ -187,7 +175,7 @@
       ],
       "fallback": ["quant-rules"],
       "judgeModelCode": "quant-rules",
-      "enabled": true
+      "enabled": false
     }
   ]
 }

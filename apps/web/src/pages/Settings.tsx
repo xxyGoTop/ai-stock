@@ -116,8 +116,8 @@ export default function Settings() {
       <section className="panel" style={{ marginTop: 16 }}>
         <h2 className="section-title">分析设置</h2>
         <p className="muted">
-          密钥只写项目根目录 <code>.env</code>，不入库。火山方舟填 <code>ARK_API_KEY</code>（也认{' '}
-          <code>LLM_ARK_KEY</code>）。对话默认：豆包 Seed 2.1 Pro → DeepSeek V4 Flash → AIHubMix → 量化规则。
+          密钥只写项目根目录 <code>.env</code>，不入库。当前只用火山方舟：豆包 Seed 2.1 Pro → DeepSeek V4
+          Flash → 量化规则。其他供应商先停用。
         </p>
         {error && <p className="warn">{error}</p>}
         <div className="algo-pills">
@@ -151,7 +151,7 @@ export default function Settings() {
       <section className="panel" style={{ marginTop: 16 }}>
         <h3 style={{ marginTop: 0 }}>模型目录</h3>
         <div className="results">
-          {models.map((m) => (
+          {models.filter((m) => m.enabled).map((m) => (
             <div className="row" key={m.code}>
               <div>
                 <strong>{m.code}</strong>

@@ -24,6 +24,7 @@ import type {
   StockNewsFeed,
 } from '@ai-stock/types'
 import ChatBlocks from '../components/ChatBlocks'
+import ChatModelSelect from '../components/ChatModelSelect'
 import KlineChart from '../components/KlineChart'
 import {
   IconFullscreen,
@@ -150,7 +151,11 @@ export default function Chat() {
 
   useEffect(() => {
     listLlmModels()
-      .then((items) => setChatModels(items.filter((m) => m.enabled)))
+      .then((items) => {
+        const ready = items.filter((m) => m.enabled && m.ready && !m.exhausted)
+        setChatModels(ready)
+        setChatModel((cur) => (cur === 'auto' || ready.some((m) => m.code === cur) ? cur : 'auto'))
+      })
       .catch(() => setChatModels([]))
   }, [])
 
@@ -896,20 +901,7 @@ export default function Chat() {
         </div>
 
         <form className="chat-composer" onSubmit={onSubmit}>
-          <select
-            className="chat-model"
-            value={chatModel}
-            onChange={(e) => chooseChatModel(e.target.value)}
-            title="对话分析使用的模型"
-          >
-            <option value="auto">火山方舟 · 自动回退</option>
-            {chatModels.map((m) => (
-              <option key={m.code} value={m.code} disabled={!m.ready || m.exhausted}>
-                {m.name || m.code}
-                {!m.ready ? '（缺密钥）' : m.exhausted ? '（额度用尽）' : ''}
-              </option>
-            ))}
-          </select>
+          <ChatModelSelect models={chatModels} value={chatModel} onChange={chooseChatModel} />
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
