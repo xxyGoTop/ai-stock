@@ -80,13 +80,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/watchlist/items/", s.watchItem)
 	mux.HandleFunc("/api/v1/watchlist/items", s.watchItems)
 	mux.HandleFunc("/api/v1/watchlist", s.watchlist)
+	mux.HandleFunc("/api/v1/hot", s.hot)
+	mux.HandleFunc("/api/v1/news", s.stockNews)
 	return s.cors(mux)
 }
 
 func (s *Server) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", s.origin)
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -363,8 +365,16 @@ func (s *Server) paperOrders(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) watchlist(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodDelete {
+		if err := s.watch.Clear(); err != nil {
+			response.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		response.OK(w, map[string]interface{}{"cleared": true, "items": []interface{}{}})
+		return
+	}
 	if r.Method != http.MethodGet {
-		response.Error(w, http.StatusMethodNotAllowed, "GET only")
+		response.Error(w, http.StatusMethodNotAllowed, "GET or DELETE")
 		return
 	}
 	category := strings.TrimSpace(r.URL.Query().Get("category"))
@@ -525,6 +535,26 @@ func (s *Server) hot(w http.ResponseWriter, r *http.Request) {
 	feed, err := s.bundle.HotFeed(limit)
 	if err != nil {
 		response.Error(w, http.StatusBadGateway, "hot: "+err.Error())
+		return
+	}
+	response.OK(w, feed)
+}
+
+func (s *Server) stockNews(w http.ResponseWriter, r *http.Request) {
+	symbol := strings.TrimSpace(r.URL.Query().Get("symbol"))
+	if symbol == "" {
+		response.Error(w, http.StatusBadRequest, "symbol required")
+		return
+	}
+	limit := 8
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 20 {
+			limit = n
+		}
+	}
+	feed, err := s.bundle.StockNews(symbol, limit)
+	if err != nil {
+		response.Error(w, http.StatusBadGateway, "news: "+err.Error())
 		return
 	}
 	response.OK(w, feed)

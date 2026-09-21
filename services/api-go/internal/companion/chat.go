@@ -49,6 +49,10 @@ func (s *Service) Chat(req ChatRequest) (*ChatResponse, error) {
 		return s.analyzeStock(symbol, msg)
 	case "watch":
 		return s.addWatch(symbol, msg)
+	case "unwatch":
+		return s.removeWatch(symbol, msg)
+	case "watch_clear":
+		return s.clearWatchlist()
 	case "paper":
 		return s.paperHint(symbol, msg)
 	case "kline":
@@ -103,6 +107,10 @@ func detectIntent(msg, symbol string) string {
 		sym = extractSymbol(msg)
 	}
 	switch {
+	case strings.Contains(msg, "自选") && (strings.Contains(msg, "清空") || strings.Contains(msg, "一键清空")):
+		return "watch_clear"
+	case strings.Contains(msg, "自选") && (strings.Contains(msg, "删除") || strings.Contains(msg, "移除") || strings.Contains(msg, "移出") || strings.Contains(msg, "取消自选")):
+		return "unwatch"
 	case strings.Contains(msg, "自选") && (strings.Contains(msg, "加入") || strings.Contains(msg, "添加") || strings.Contains(msg, "加自选")):
 		return "watch"
 	case strings.Contains(msg, "模拟") || strings.Contains(msg, "下单") || strings.Contains(msg, "买入") || strings.Contains(msg, "卖出"):
@@ -444,6 +452,15 @@ func (s *Service) analyzeStock(symbol, msg string) (*ChatResponse, error) {
 		}
 	}
 
+	if feed, nerr := s.bundle.StockNews(symbol, 5); nerr == nil && feed != nil {
+		if len(feed.News) > 0 {
+			blocks = append(blocks, Block{Type: "news", Title: "相关新闻", Items: feed.News, Symbol: symbol})
+		}
+		if len(feed.Notices) > 0 {
+			blocks = append(blocks, Block{Type: "news", Title: "近期公告", Items: feed.Notices, Symbol: symbol})
+		}
+	}
+
 	blocks = append(blocks, Block{
 		Type:    "actions",
 		Title:   "接下来可以",
@@ -452,7 +469,7 @@ func (s *Service) analyzeStock(symbol, msg string) (*ChatResponse, error) {
 		Items:   []string{"加入自选", "加入明日计划", "加入模拟交易", "打开今日K线"},
 	})
 
-	reply := fmt.Sprintf("已整理 %s 的快照与分析。可加入自选或明日计划，右侧可看 K 线。", quote.Name)
+	reply := fmt.Sprintf("已整理 %s 的快照、新闻与分析。可加入自选或明日计划，右侧可看 K 线和公告。", quote.Name)
 	return &ChatResponse{
 		Reply:  reply,
 		Intent: "analyze",
@@ -486,6 +503,52 @@ func (s *Service) addWatch(symbol, msg string) (*ChatResponse, error) {
 			Actions: []string{"analyze", "paper", "kline"},
 		}},
 		Workspace: &WorkspaceHint{Type: "stock", Symbol: item.Symbol, Name: item.Name, Tab: "overview"},
+	}, nil
+}
+
+func (s *Service) removeWatch(symbol, msg string) (*ChatResponse, error) {
+	if symbol == "" || symbol == "000000" {
+		symbol = extractSymbol(msg)
+	}
+	if symbol == "" {
+		return &ChatResponse{Reply: "请先指定要删除的股票，例如「删除自选茅台」。", Intent: "unwatch"}, nil
+	}
+	name := symbol
+	if q, err := s.bundle.Quote(symbol); err == nil && q != nil {
+		name = q.Name
+		symbol = q.Symbol
+	}
+	if err := s.watch.Remove(symbol); err != nil {
+		return &ChatResponse{Reply: "删除自选失败：" + err.Error(), Intent: "unwatch"}, nil
+	}
+	return &ChatResponse{
+		Reply:  fmt.Sprintf("已将 %s（%s）移出自选。", name, symbol),
+		Intent: "unwatch",
+		Blocks: []Block{{
+			Type:  "suggestions",
+			Title: "接下来",
+			Items: []string{"我的自选", "分析" + name, "加入自选"},
+		}},
+	}, nil
+}
+
+func (s *Service) clearWatchlist() (*ChatResponse, error) {
+	items, err := s.watch.All()
+	if err != nil {
+		return &ChatResponse{Reply: "读取自选失败：" + err.Error(), Intent: "watch_clear"}, nil
+	}
+	n := len(items)
+	if err := s.watch.Clear(); err != nil {
+		return &ChatResponse{Reply: "清空自选失败：" + err.Error(), Intent: "watch_clear"}, nil
+	}
+	return &ChatResponse{
+		Reply:  fmt.Sprintf("已清空自选，共移除 %d 只。", n),
+		Intent: "watch_clear",
+		Blocks: []Block{{
+			Type:  "suggestions",
+			Title: "可以",
+			Items: []string{"分析贵州茅台", "帮我选股", "看看自选异动"},
+		}},
 	}, nil
 }
 

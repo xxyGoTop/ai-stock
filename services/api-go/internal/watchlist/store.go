@@ -278,6 +278,12 @@ func (s *Store) Update(symbol string, patch UpsertInput) (*Item, error) {
 	return nil, fmt.Errorf("not found")
 }
 
+func (s *Store) Clear() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.save(&List{Items: []Item{}})
+}
+
 func (s *Store) Remove(id string) error {
 	id = provider.PadSymbol(id)
 	s.mu.Lock()

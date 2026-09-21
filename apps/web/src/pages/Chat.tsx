@@ -5,6 +5,7 @@ import {
   getIndicators,
   getKline,
   getStock,
+  getStockNews,
   getWatchAnomalies,
   getTodayOps,
 } from '@ai-stock/api-client'
@@ -18,6 +19,7 @@ import type {
   IndicatorPoint,
   KlineBar,
   Quote,
+  StockNewsFeed,
 } from '@ai-stock/types'
 import ChatBlocks from '../components/ChatBlocks'
 import KlineChart from '../components/KlineChart'
@@ -124,7 +126,9 @@ export default function Chat() {
   const [quote, setQuote] = useState<Quote | null>(null)
   const [bars, setBars] = useState<KlineBar[]>([])
   const [series, setSeries] = useState<IndicatorPoint[]>([])
+  const [stockNews, setStockNews] = useState<StockNewsFeed | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const pinBottomRef = useRef(true)
   const persistRef = useRef(true)
   const abortRef = useRef<AbortController | null>(null)
   const runGenRef = useRef(0)
@@ -136,6 +140,7 @@ export default function Chat() {
   const [wsCollapsed, setWsCollapsed] = useState(layoutInit.wsCollapsed)
   const [wsWidth, setWsWidth] = useState(layoutInit.wsWidth)
   const [fullscreen, setFullscreen] = useState(layoutInit.fullscreen)
+  const [showJump, setShowJump] = useState(false)
   const dragRef = useRef<{ startX: number; startW: number } | null>(null)
 
   function refreshList() {
@@ -235,8 +240,30 @@ export default function Chat() {
   }, [messages, workspace, briefing, phaseLabel])
 
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
+    const el = listRef.current
+    if (!el || !pinBottomRef.current) return
+    el.scrollTo({ top: el.scrollHeight, behavior: loading ? 'auto' : 'smooth' })
   }, [messages, loading, liveProgress, liveText, liveBlocks, liveTools, agentState])
+
+  function nearBottom(el: HTMLDivElement, slack = 96) {
+    return el.scrollHeight - el.scrollTop - el.clientHeight < slack
+  }
+
+  function onChatScroll() {
+    const el = listRef.current
+    if (!el) return
+    const pinned = nearBottom(el)
+    pinBottomRef.current = pinned
+    setShowJump(!pinned)
+  }
+
+  function jumpToBottom() {
+    const el = listRef.current
+    if (!el) return
+    pinBottomRef.current = true
+    setShowJump(false)
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }
 
   // 自选异动：页内主动推送（去重指纹）
   useEffect(() => {
@@ -374,6 +401,7 @@ export default function Chat() {
       setQuote(null)
       setBars([])
       setSeries([])
+      setStockNews(null)
       return
     }
     const symbol = workspace.symbol
@@ -393,6 +421,13 @@ export default function Chat() {
         if (!cancelled) setSeries(ind.series)
       })
       .catch(() => undefined)
+    getStockNews(symbol, 8)
+      .then((feed) => {
+        if (!cancelled) setStockNews(feed)
+      })
+      .catch(() => {
+        if (!cancelled) setStockNews({ symbol, news: [], notices: [] })
+      })
     return () => {
       cancelled = true
     }
@@ -584,6 +619,8 @@ export default function Chat() {
     const map: Record<string, string> = {
       analyze: `分析 ${label || symbol || ''}`,
       watch: `把 ${label || symbol || ''} 加入自选`,
+      unwatch: `把 ${label || symbol || ''} 移出自选`,
+      watch_clear: '清空自选',
       paper: `模拟交易 ${label || symbol || ''}`,
       kline: `打开 ${label || symbol || ''} K线`,
       watchlist: '我的自选',
@@ -600,6 +637,8 @@ export default function Chat() {
 
   function onCreateSession() {
     persistRef.current = false
+    pinBottomRef.current = true
+    setShowJump(false)
     const conv = createConversation()
     hydrate(conv)
     refreshList()
@@ -610,6 +649,8 @@ export default function Chat() {
   function onSelectSession(id: string) {
     if (id === activeId) return
     persistRef.current = false
+    pinBottomRef.current = true
+    setShowJump(false)
     saveActiveConversation({ messages, workspace, briefing, phaseLabel, bootstrapped: true })
     const hit = switchConversation(id)
     if (hit) {
@@ -626,6 +667,8 @@ export default function Chat() {
 
   function onDeleteSession(id: string) {
     persistRef.current = false
+    pinBottomRef.current = true
+    setShowJump(false)
     const next = deleteConversation(id)
     hydrate(next)
     refreshList()
@@ -784,7 +827,8 @@ export default function Chat() {
           ))}
         </div>
 
-        <div className="chat-stream" ref={listRef}>
+        <div className="chat-stream-wrap">
+        <div className="chat-stream" ref={listRef} onScroll={onChatScroll}>
           {messages.map((m) => (
             <article key={m.id} className={`chat-bubble ${m.role}${m.proactive ? ' proactive' : ''}`}>
               <div className="chat-role">
@@ -825,6 +869,12 @@ export default function Chat() {
               </div>
             </article>
           )}
+        </div>
+        {showJump && (
+          <button type="button" className="chat-jump" onClick={jumpToBottom}>
+            回到底部
+          </button>
+        )}
         </div>
 
         <form className="chat-composer" onSubmit={onSubmit}>
@@ -906,14 +956,14 @@ export default function Chat() {
                 </div>
                 {workspace.type === 'stock' && workspace.symbol && (
                   <div className="workspace-tabs">
-                    {(['overview', 'kline', 'analysis', 'paper'] as const).map((t) => (
+                    {(['overview', 'kline', 'news', 'analysis', 'paper'] as const).map((t) => (
                       <button
                         key={t}
                         type="button"
                         className={`pill ${tab === t ? 'on' : ''}`}
                         onClick={() => setWorkspace((w) => ({ ...w, tab: t }))}
                       >
-                        {{ overview: '概览', kline: 'K线', analysis: '分析', paper: '模拟' }[t]}
+                        {{ overview: '概览', kline: 'K线', news: '新闻', analysis: '分析', paper: '模拟' }[t]}
                       </button>
                     ))}
                   </div>
@@ -992,6 +1042,57 @@ export default function Chat() {
                 {(tab === 'overview' || tab === 'kline') && bars.length > 0 && (
                   <div className="workspace-kline">
                     <KlineChart bars={bars} series={series} />
+                  </div>
+                )}
+
+                {tab === 'news' && (
+                  <div className="workspace-block">
+                    <h3>相关新闻</h3>
+                    {!stockNews ? (
+                      <p className="muted">加载新闻…</p>
+                    ) : stockNews.news.length === 0 ? (
+                      <p className="muted">暂无相关新闻</p>
+                    ) : (
+                      <ul className="news-mini">
+                        {stockNews.news.map((n, idx) => (
+                          <li key={`${n.code || n.url}-${idx}`}>
+                            {n.url ? (
+                              <a href={n.url} target="_blank" rel="noreferrer">
+                                {n.title}
+                              </a>
+                            ) : (
+                              n.title
+                            )}
+                            <div className="muted tiny">
+                              {[n.source, n.time].filter(Boolean).join(' · ')}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <h3 style={{ marginTop: 16 }}>近期公告</h3>
+                    {!stockNews ? (
+                      <p className="muted">加载公告…</p>
+                    ) : !stockNews.notices.length ? (
+                      <p className="muted">暂无公告</p>
+                    ) : (
+                      <ul className="news-mini">
+                        {stockNews.notices.map((n, idx) => (
+                          <li key={`${n.code || n.url}-n-${idx}`}>
+                            {n.url ? (
+                              <a href={n.url} target="_blank" rel="noreferrer">
+                                {n.title}
+                              </a>
+                            ) : (
+                              n.title
+                            )}
+                            <div className="muted tiny">
+                              {[n.summary, n.time].filter(Boolean).join(' · ')}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 )}
 

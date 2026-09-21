@@ -23,6 +23,7 @@ import type {
   ScreenResult,
   Stock,
   StockAnalysis,
+  StockNewsFeed,
 } from '@ai-stock/types'
 
 const API_BASE = (import.meta as { env?: { VITE_API_BASE?: string } }).env?.VITE_API_BASE || '/api/v1'
@@ -93,6 +94,10 @@ export function getHotFeed(limit = 15) {
   return get<HotFeed>(`/hot?limit=${limit}`)
 }
 
+export function getStockNews(symbol: string, limit = 8) {
+  return get<StockNewsFeed>(`/news?symbol=${encodeURIComponent(symbol)}&limit=${limit}`)
+}
+
 export function getDailyNote(symbol: string, force = false) {
   return get<DailyNote>(`/ai/daily-note?symbol=${encodeURIComponent(symbol)}${force ? '&force=1' : ''}`)
 }
@@ -142,6 +147,10 @@ export function updateWatchItem(
 
 export function removeWatchItem(symbol: string) {
   return del<{ removed: string }>(`/watchlist/items/${encodeURIComponent(symbol)}`)
+}
+
+export function clearWatchlist() {
+  return del<{ cleared: boolean }>('/watchlist')
 }
 
 export function getCompanionBriefing() {

@@ -1,14 +1,28 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { getPaperAccount, listAnalysisProfiles, resetPaperAccount } from '@ai-stock/api-client'
+import { clearWatchlist, getPaperAccount, getWatchlist, listAnalysisProfiles, removeWatchItem, resetPaperAccount } from '@ai-stock/api-client'
 import { changeTone, formatChange } from '@ai-stock/business'
-import type { AnalysisProfile, PaperAccount } from '@ai-stock/types'
+import type { AnalysisProfile, PaperAccount, WatchItem } from '@ai-stock/types'
+import { notifyWatchUpdated, WATCH_EVENT } from '../lib/watch'
 import { PROFILE_KEY } from '../lib/cache'
 import { notifyPaperUpdated, PAPER_EVENT } from '../lib/paper'
 
 export default function TopTools() {
   return (
     <div className="top-tools">
+      <ToolFlyout
+        label="自选"
+        icon={
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+            <path
+              fill="currentColor"
+              d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
+            />
+          </svg>
+        }
+      >
+        <WatchFlyout />
+      </ToolFlyout>
       <ToolFlyout
         label="模拟"
         icon={
@@ -127,6 +141,85 @@ function PaperFlyout() {
       <button type="button" className="ghost-btn" disabled={busy} onClick={() => void reset()}>
         {busy ? '重置中…' : '重置账户'}
       </button>
+    </div>
+  )
+}
+
+function WatchFlyout() {
+  const [items, setItems] = useState<WatchItem[]>([])
+  const [busy, setBusy] = useState('')
+
+  useEffect(() => {
+    const load = () => {
+      getWatchlist()
+        .then((data) => setItems(data.items || []))
+        .catch(() => setItems([]))
+    }
+    load()
+    window.addEventListener(WATCH_EVENT, load)
+    return () => window.removeEventListener(WATCH_EVENT, load)
+  }, [])
+
+  async function removeOne(symbol: string) {
+    setBusy(symbol)
+    try {
+      await removeWatchItem(symbol)
+      setItems((prev) => prev.filter((it) => it.symbol !== symbol))
+      notifyWatchUpdated()
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : '删除失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function clearAll() {
+    if (!items.length) return
+    if (!window.confirm(`清空全部自选（${items.length} 只）？`)) return
+    setBusy('clear')
+    try {
+      await clearWatchlist()
+      setItems([])
+      notifyWatchUpdated()
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : '清空失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  return (
+    <div className="flyout-body">
+      <div className="flyout-title">
+        <strong>自选股</strong>
+        <span className="muted">{items.length} 只</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="muted tight">还没有自选。在对话里分析后点「加入自选」。</p>
+      ) : (
+        <ul className="flyout-list">
+          {items.slice(0, 8).map((it) => (
+            <li key={it.symbol}>
+              <Link to={`/stock/${it.symbol}`}>
+                {it.name} <span className="muted">{it.symbol}</span>
+              </Link>
+              <button
+                type="button"
+                className="ghost-btn"
+                disabled={busy === it.symbol}
+                onClick={() => void removeOne(it.symbol)}
+              >
+                {busy === it.symbol ? '…' : '删除'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {items.length > 0 && (
+        <button type="button" className="ghost-btn" disabled={busy === 'clear'} onClick={() => void clearAll()}>
+          {busy === 'clear' ? '清空中…' : '一键清空'}
+        </button>
+      )}
     </div>
   )
 }

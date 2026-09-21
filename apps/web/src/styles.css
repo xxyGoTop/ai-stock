@@ -17,6 +17,7 @@ html,
 body,
 #root {
   margin: 0;
+  height: 100%;
   min-height: 100%;
   background: var(--bg);
   color: var(--text);
@@ -38,6 +39,15 @@ a {
   max-width: 1440px;
 }
 
+.app.companion-app:has(.companion) {
+  height: 100dvh;
+  max-height: 100dvh;
+  padding: 12px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -47,6 +57,8 @@ a {
 
 .topbar.compact-topbar {
   gap: 12px;
+  flex-shrink: 0;
+  margin-bottom: 12px;
 }
 
 .tag.grow {
@@ -89,6 +101,16 @@ a {
 .pill.on {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.pill.danger {
+  color: #f0a0a0;
+  border-color: rgba(220, 80, 80, 0.4);
+}
+
+.pill.danger:hover:not(:disabled) {
+  color: #ffd0d0;
+  border-color: rgba(220, 80, 80, 0.7);
 }
 
 .pill input {
@@ -988,7 +1010,8 @@ a {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
   gap: 14px;
-  min-height: calc(100vh - 110px);
+  flex: 1;
+  min-height: 0;
   align-items: stretch;
 }
 
@@ -1000,7 +1023,7 @@ a {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  max-height: calc(100vh - 110px);
+  height: 100%;
   padding: 12px;
   overflow: hidden;
 }
@@ -1073,9 +1096,11 @@ a {
 .session-list {
   overflow: auto;
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overscroll-behavior: contain;
 }
 
 .session-day {
@@ -1334,7 +1359,7 @@ a {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  max-height: calc(100vh - 110px);
+  height: 100%;
 }
 
 .companion-workspace {
@@ -1404,21 +1429,13 @@ body.layout-fullscreen .topbar {
 }
 
 body.layout-fullscreen .companion {
-  min-height: 100vh;
-  height: 100vh;
+  min-height: 0;
+  height: auto;
   margin: 0;
-  padding: 10px 12px;
-  box-sizing: border-box;
-}
-
-body.layout-fullscreen .session-sidebar,
-body.layout-fullscreen .companion-chat,
-body.layout-fullscreen .companion-workspace {
-  max-height: calc(100vh - 20px);
 }
 
 body.layout-fullscreen .app.companion-app {
-  min-height: 100vh;
+  padding: 10px 12px;
 }
 
 .companion-head,
@@ -1450,13 +1467,54 @@ body.layout-fullscreen .app.companion-app {
   border-color: var(--accent);
 }
 
+.chat-stream-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .chat-stream {
   flex: 1;
-  overflow: auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding-right: 4px;
+  padding-right: 6px;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.chat-stream:hover,
+.chat-stream:focus-within {
+  scrollbar-color: rgba(110, 130, 168, 0.55) transparent;
+}
+
+.chat-jump {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  z-index: 3;
+  border: 1px solid #3a4d72;
+  background: #18233a;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.chat-jump:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .chat-bubble {
@@ -1700,6 +1758,8 @@ body.layout-fullscreen .app.companion-app {
 .workspace-stock {
   overflow: auto;
   flex: 1;
+  min-height: 0;
+  overscroll-behavior: contain;
 }
 
 .workspace-block {
@@ -1743,13 +1803,66 @@ body.layout-fullscreen .app.companion-app {
   color: var(--down);
 }
 
+.chat-stream::-webkit-scrollbar,
+.session-list::-webkit-scrollbar,
+.workspace-market::-webkit-scrollbar,
+.workspace-stock::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-stream::-webkit-scrollbar-track,
+.session-list::-webkit-scrollbar-track,
+.workspace-market::-webkit-scrollbar-track,
+.workspace-stock::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-stream::-webkit-scrollbar-thumb,
+.session-list::-webkit-scrollbar-thumb,
+.workspace-market::-webkit-scrollbar-thumb,
+.workspace-stock::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.chat-stream:hover::-webkit-scrollbar-thumb,
+.chat-stream:focus-within::-webkit-scrollbar-thumb,
+.session-list:hover::-webkit-scrollbar-thumb,
+.workspace-market:hover::-webkit-scrollbar-thumb,
+.workspace-stock:hover::-webkit-scrollbar-thumb {
+  background: rgba(110, 130, 168, 0.55);
+  background-clip: padding-box;
+}
+
+.session-list,
+.workspace-market,
+.workspace-stock {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.session-list:hover,
+.workspace-market:hover,
+.workspace-stock:hover {
+  scrollbar-color: rgba(110, 130, 168, 0.55) transparent;
+}
+
 @media (max-width: 1100px) {
+  .app.companion-app {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
   .companion.with-sessions {
     grid-template-columns: 1fr !important;
   }
 
   .session-sidebar {
     max-height: 180px;
+    height: auto;
   }
 
   .session-sidebar.collapsed,
@@ -1779,6 +1892,11 @@ body.layout-fullscreen .app.companion-app {
   .companion-chat,
   .companion-workspace {
     max-height: none;
+    height: auto;
+  }
+
+  .chat-stream-wrap {
+    max-height: 55vh;
   }
 
   .chat-stream {

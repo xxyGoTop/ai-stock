@@ -193,6 +193,12 @@ export interface HotFeed {
   boards: HotBoard[]
 }
 
+export interface StockNewsFeed {
+  symbol: string
+  news: HotNews[]
+  notices: HotNews[]
+}
+
 export interface DailyNote {
   type: string
   symbol: string
@@ -429,7 +435,7 @@ export interface CompanionWorkspace {
   type: 'market' | 'stock' | 'empty' | string
   symbol?: string
   name?: string
-  tab?: 'overview' | 'kline' | 'analysis' | 'paper' | string
+  tab?: 'overview' | 'kline' | 'news' | 'analysis' | 'paper' | string
 }
 
 export interface CompanionChatResponse {

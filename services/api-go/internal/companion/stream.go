@@ -93,6 +93,12 @@ func (s *Service) ChatStream(ctx context.Context, req ChatRequest, emit EmitFunc
 	case "watch":
 		res, err = s.addWatch(symbol, msg)
 		s.emitStaticRun(emit, plan, res, err)
+	case "unwatch":
+		res, err = s.removeWatch(symbol, msg)
+		s.emitStaticRun(emit, plan, res, err)
+	case "watch_clear":
+		res, err = s.clearWatchlist()
+		s.emitStaticRun(emit, plan, res, err)
 	case "paper":
 		res, err = s.paperHint(symbol, msg)
 		s.emitStaticRun(emit, plan, res, err)
@@ -187,6 +193,7 @@ func planForAction(action string) []PlanStep {
 		return []PlanStep{
 			{ID: "quote", Title: "获取实时行情", Status: "pending"},
 			{ID: "note", Title: "生成每日笔记", Status: "pending"},
+			{ID: "news", Title: "个股新闻与公告", Status: "pending"},
 			{ID: "ai", Title: "AI 解读整理", Status: "pending"},
 			{ID: "actions", Title: "准备后续动作", Status: "pending"},
 		}
@@ -546,6 +553,31 @@ func (s *Service) streamAnalyze(ctx context.Context, emit EmitFunc, plan []PlanS
 		return nil, ctx.Err()
 	}
 
+	plan = markPlan(emit, plan, "news", "running")
+	toolStart(emit, "stock_news", "个股新闻与公告")
+	if feed, err := s.bundle.StockNews(symbol, 5); err == nil && feed != nil {
+		if len(feed.News) > 0 {
+			b := Block{Type: "news", Title: "相关新闻", Items: feed.News, Symbol: symbol}
+			blocks = append(blocks, b)
+			emitBlock(emit, b)
+		}
+		if len(feed.Notices) > 0 {
+			b := Block{Type: "news", Title: "近期公告", Items: feed.Notices, Symbol: symbol}
+			blocks = append(blocks, b)
+			emitBlock(emit, b)
+		}
+		toolResult(emit, "stock_news", "个股新闻与公告", true, fmt.Sprintf("新闻 %d · 公告 %d", len(feed.News), len(feed.Notices)), nil, "")
+	} else {
+		errMsg := "暂无"
+		if err != nil {
+			errMsg = err.Error()
+		}
+		toolResult(emit, "stock_news", "个股新闻与公告", false, "", nil, errMsg)
+	}
+	if aborted(ctx) {
+		return nil, ctx.Err()
+	}
+
 	plan = markPlan(emit, plan, "ai", "running")
 	toolStart(emit, "ai_analyze", "AI 解读")
 	payload, _ := json.Marshal(map[string]string{"symbol": symbol})
@@ -581,7 +613,7 @@ func (s *Service) streamAnalyze(ctx context.Context, emit EmitFunc, plan []PlanS
 	}
 	emit("research.plan", map[string]interface{}{"steps": plan})
 
-	reply := fmt.Sprintf("已整理 %s 的快照与分析。右侧研究工作台可看 K 线，也可一键自选/模拟。", quote.Name)
+	reply := fmt.Sprintf("已整理 %s 的快照、新闻与分析。右侧可看 K 线和公告，也可一键自选/模拟。", quote.Name)
 	return &ChatResponse{
 		Reply: reply, Intent: "analyze", Blocks: blocks,
 		Workspace: &WorkspaceHint{Type: "stock", Symbol: quote.Symbol, Name: quote.Name, Tab: "analysis"},

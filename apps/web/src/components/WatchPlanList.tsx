@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { clearWatchlist, removeWatchItem } from '@ai-stock/api-client'
 import { changeTone, formatChange } from '@ai-stock/business'
 import type { WatchItem } from '@ai-stock/types'
+import { notifyWatchUpdated } from '../lib/watch'
 
 type Props = {
   items: WatchItem[]
@@ -34,25 +36,66 @@ export default function WatchPlanList({ items, pageSize = 8, mode = 'watchlist',
     mode === 'tomorrow_plan' || mode === 'today_ops' ? 'tomorrow_plan' : 'all',
   )
   const [page, setPage] = useState(0)
+  const [hidden, setHidden] = useState<Set<string>>(new Set())
+  const [cleared, setCleared] = useState(false)
+  const [busy, setBusy] = useState('')
+  const sig = items.map((it) => it.symbol).join(',')
+
+  useEffect(() => {
+    setHidden(new Set())
+    setCleared(false)
+  }, [sig])
+
+  const visible = useMemo(() => {
+    if (cleared) return []
+    return items.filter((it) => !hidden.has(it.symbol))
+  }, [items, hidden, cleared])
 
   const filtered = useMemo(() => {
-    if (mode !== 'watchlist' || tab === 'all') return items
+    if (mode !== 'watchlist' || tab === 'all') return visible
     if (tab === 'tomorrow_plan') {
-      return items.filter((it) => (it.category || 'default') === 'tomorrow_plan')
+      return visible.filter((it) => (it.category || 'default') === 'tomorrow_plan')
     }
-    return items.filter((it) => (it.category || 'default') !== 'tomorrow_plan')
-  }, [items, tab, mode])
+    return visible.filter((it) => (it.category || 'default') !== 'tomorrow_plan')
+  }, [visible, tab, mode])
 
   const total = Math.max(1, Math.ceil(filtered.length / pageSize))
   const safePage = Math.min(page, total - 1)
   const slice = filtered.slice(safePage * pageSize, safePage * pageSize + pageSize)
 
-  const defCount = items.filter((it) => (it.category || 'default') !== 'tomorrow_plan').length
-  const planCount = items.filter((it) => (it.category || 'default') === 'tomorrow_plan').length
+  const defCount = visible.filter((it) => (it.category || 'default') !== 'tomorrow_plan').length
+  const planCount = visible.filter((it) => (it.category || 'default') === 'tomorrow_plan').length
   const showPlan = mode !== 'watchlist' || tab === 'tomorrow_plan' || tab === 'all'
 
-  if (items.length === 0) {
-    return <p className="muted">暂无标的</p>
+  async function removeOne(symbol: string) {
+    setBusy(symbol)
+    try {
+      await removeWatchItem(symbol)
+      setHidden((prev) => new Set([...prev, symbol]))
+      notifyWatchUpdated()
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : '删除失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function clearAll() {
+    if (!window.confirm(`清空全部自选（${visible.length} 只）？此操作不可恢复。`)) return
+    setBusy('clear')
+    try {
+      await clearWatchlist()
+      setCleared(true)
+      notifyWatchUpdated()
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : '清空失败')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  if (visible.length === 0) {
+    return <p className="muted">{cleared || hidden.size ? '自选已清空。' : '暂无标的'}</p>
   }
 
   return (
@@ -61,7 +104,7 @@ export default function WatchPlanList({ items, pageSize = 8, mode = 'watchlist',
         <div className="watch-tabs">
           {(
             [
-              { id: 'all' as const, label: `全部 ${items.length}` },
+              { id: 'all' as const, label: `全部 ${visible.length}` },
               { id: 'default' as const, label: `普通 ${defCount}` },
               { id: 'tomorrow_plan' as const, label: `明日计划 ${planCount}` },
             ] as const
@@ -78,6 +121,11 @@ export default function WatchPlanList({ items, pageSize = 8, mode = 'watchlist',
               {t.label}
             </button>
           ))}
+          {visible.length > 0 && (
+            <button type="button" className="pill danger" disabled={busy === 'clear'} onClick={() => void clearAll()}>
+              {busy === 'clear' ? '清空中…' : '一键清空'}
+            </button>
+          )}
         </div>
       )}
 
@@ -122,6 +170,14 @@ export default function WatchPlanList({ items, pageSize = 8, mode = 'watchlist',
                   明日计划
                 </button>
               )}
+              <button
+                type="button"
+                className="pill danger"
+                disabled={busy === it.symbol}
+                onClick={() => void removeOne(it.symbol)}
+              >
+                {busy === it.symbol ? '删除中…' : '删除'}
+              </button>
             </div>
           </div>
         ))}
