@@ -101,6 +101,19 @@
       "costTier": "low",
       "jsonMode": false,
       "enabled": true
+    },
+    {
+      "code": "deepseek-v4-pro",
+      "label": "DeepSeek V4 Pro",
+      "providerCode": "volcengine_ark",
+      "modelName": "deepseek-v4-pro-ga-260813",
+      "modelNameRef": "env:LLM_ARK_DS_PRO_MODEL|ARK_DS_PRO_MODEL",
+      "roles": ["analyst", "screener", "planner", "judge"],
+      "maxTokens": 2048,
+      "timeoutMs": 90000,
+      "costTier": "mid",
+      "jsonMode": false,
+      "enabled": true
     }
   ],
   "profiles": [
@@ -124,9 +137,10 @@
         { "modelCode": "doubao-seed-2-1-lite", "weight": 1, "temperature": 0.2 },
         { "modelCode": "doubao-seed-2-1-pro", "weight": 1, "temperature": 0.2 },
         { "modelCode": "deepseek-v4-flash", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "deepseek-v4-pro", "weight": 1, "temperature": 0.2 },
         { "modelCode": "quant-rules", "weight": 1, "temperature": 0 }
       ],
-      "fallback": ["doubao-seed-2-1-lite", "doubao-seed-2-1-pro", "deepseek-v4-flash", "quant-rules"],
+      "fallback": ["doubao-seed-2-1-lite", "doubao-seed-2-1-pro", "deepseek-v4-flash", "deepseek-v4-pro", "quant-rules"],
       "enabled": true
     },
     {
@@ -137,11 +151,12 @@
       "mode": "fallback",
       "models": [
         { "modelCode": "doubao-seed-2-1-pro", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "deepseek-v4-pro", "weight": 1, "temperature": 0.2 },
         { "modelCode": "doubao-seed-2-1-lite", "weight": 1, "temperature": 0.2 },
         { "modelCode": "deepseek-v4-flash", "weight": 1, "temperature": 0.2 },
         { "modelCode": "quant-rules", "weight": 1, "temperature": 0 }
       ],
-      "fallback": ["doubao-seed-2-1-pro", "doubao-seed-2-1-lite", "deepseek-v4-flash", "quant-rules"],
+      "fallback": ["doubao-seed-2-1-pro", "deepseek-v4-pro", "doubao-seed-2-1-lite", "deepseek-v4-flash", "quant-rules"],
       "enabled": true
     },
     {
@@ -151,11 +166,12 @@
       "agentCode": "stock_analyst",
       "mode": "ensemble",
       "models": [
-        { "modelCode": "doubao-seed-2-1-lite", "weight": 0.35, "temperature": 0.2 },
-        { "modelCode": "deepseek-v4-flash", "weight": 0.35, "temperature": 0.2 },
-        { "modelCode": "quant-rules", "weight": 0.3, "temperature": 0 }
+        { "modelCode": "doubao-seed-2-1-lite", "weight": 0.3, "temperature": 0.2 },
+        { "modelCode": "deepseek-v4-flash", "weight": 0.3, "temperature": 0.2 },
+        { "modelCode": "deepseek-v4-pro", "weight": 0.2, "temperature": 0.2 },
+        { "modelCode": "quant-rules", "weight": 0.2, "temperature": 0 }
       ],
-      "fallback": ["doubao-seed-2-1-lite", "quant-rules"],
+      "fallback": ["doubao-seed-2-1-lite", "deepseek-v4-pro", "quant-rules"],
       "judgeModelCode": "quant-rules",
       "enabled": true
     }

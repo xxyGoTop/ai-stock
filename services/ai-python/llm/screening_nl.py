@@ -7,7 +7,7 @@ from prompts.loader import render_messages
 from .config import get_model, model_callable
 from .providers import complete_text
 
-NL_ORDER = ["doubao-seed-2-1-lite", "doubao-seed-2-1-pro", "deepseek-v4-flash"]
+NL_ORDER = ["doubao-seed-2-1-lite", "doubao-seed-2-1-pro", "deepseek-v4-flash", "deepseek-v4-pro"]
 
 
 def parse_screening_nl(

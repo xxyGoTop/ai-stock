@@ -19,6 +19,7 @@ const MODEL: Record<string, string> = {
   'doubao-seed-2-1-lite': '豆包 Seed 2.1 Lite',
   'doubao-seed-2-1-pro': '豆包 Seed 2.1 Pro',
   'deepseek-v4-flash': 'DeepSeek V4 Flash',
+  'deepseek-v4-pro': 'DeepSeek V4 Pro',
 }
 const PROFILE: Record<string, string> = {
   stock_analysis_fast: '快速（规则）',

@@ -5,7 +5,13 @@ from prompts.loader import get_agent
 from .config import get_model, model_callable
 from .providers import complete_text
 
-CHAT_ORDER = ["doubao-seed-2-1-lite", "doubao-seed-2-1-pro", "deepseek-v4-flash", "quant-rules"]
+CHAT_ORDER = [
+    "doubao-seed-2-1-lite",
+    "doubao-seed-2-1-pro",
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "quant-rules",
+]
 
 
 def chat_reply(

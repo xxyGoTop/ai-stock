@@ -151,12 +151,13 @@ Go API :18080
 | `LLM_ARK_KEY` | 火山方舟备用 |
 | `LLM_ARK_MODEL` / `ARK_MODEL` | 可选，覆盖豆包 Seed Pro 的 Model ID / 推理接入点 `ep-xxx` |
 | `LLM_ARK_LITE_MODEL` / `ARK_LITE_MODEL` | 可选，覆盖豆包 Seed 2.1 Lite 的 Model ID / `ep-xxx` |
+| `LLM_ARK_DS_PRO_MODEL` / `ARK_DS_PRO_MODEL` | 可选，覆盖 DeepSeek V4 Pro（`deepseek-v4-pro-ga-260813`） |
 | `NOTIFY_INTERVAL_SEC` | Notification Agent 扫描间隔，默认 120，最小 30 |
 
 不配密钥也能用内置 `quant-rules`。默认分析与对话优先走火山方舟 [Chat API](https://www.volcengine.com/docs/82379/1112500)（`https://ark.cn-beijing.volces.com/api/v3`）：
 
 ```text
-doubao-seed-2-1-lite → doubao-seed-2-1-pro → deepseek-v4-flash → quant-rules
+doubao-seed-2-1-lite → doubao-seed-2-1-pro → deepseek-v4-flash → deepseek-v4-pro → quant-rules
 ```
 
 空 `{}`、429、额度不足时跳过约 6 小时再试下一个。对话输入框可切模型。其他供应商先停用。设置页 Profile：快速 / 火山方舟 / Pro 优先 / 多模型综合。个股分析走 NDJSON 进度流（`/api/v1/ai/analyze/stream`）。
