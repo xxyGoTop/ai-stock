@@ -69,12 +69,15 @@ type Briefing struct {
 }
 
 type WorkspaceHint struct {
-	Type          string `json:"type"` // market | stock | empty | compare
+	Type          string `json:"type"` // market | stock | empty | compare | sector | topic
 	Symbol        string `json:"symbol,omitempty"`
 	Name          string `json:"name,omitempty"`
-	Tab           string `json:"tab,omitempty"` // overview | kline | analysis | paper
+	Tab           string `json:"tab,omitempty"` // overview | kline | analysis | paper | constituents
 	CompareSymbol string `json:"compareSymbol,omitempty"`
 	CompareName   string `json:"compareName,omitempty"`
+	BoardCode     string `json:"boardCode,omitempty"`
+	BoardName     string `json:"boardName,omitempty"`
+	Topic         string `json:"topic,omitempty"`
 }
 
 type ChatTurn struct {

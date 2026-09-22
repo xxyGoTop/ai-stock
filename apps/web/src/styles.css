@@ -1910,6 +1910,16 @@ body.layout-fullscreen .app.companion-app {
   font-size: 12px;
 }
 
+button.chip {
+  cursor: pointer;
+  font: inherit;
+}
+
+button.chip:hover {
+  border-color: var(--accent, #4a7fd4);
+  color: var(--text, #e8eefc);
+}
+
 .chip.clickable {
   cursor: pointer;
   color: var(--text);

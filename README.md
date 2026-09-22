@@ -112,7 +112,7 @@ Go API :18080
 - [x] 服务端会话 / research_events 持久化（现在是 sessionStorage）
 - [x] 更丰富 Workspace 块（对比、风险卡等，见 V2 文档 Phase 2–4）
 - [x] Memory 用户偏好 / 长会话摘要（V2 Phase 4）
-- [ ] 行业 / 题材 Workspace 对象（sector / topic）
+- [x] 行业 / 题材 Workspace 对象（sector / topic）
 
 本地数据（不进 Git）：`services/api-go/data/watchlist.json`、`paper.json`、`anomaly_rules.json`、`notifications.json`、`conversations.json`、`memory.json`、`daily-picks/`。换机后自选与模拟账户需重新加或自行拷贝。
 

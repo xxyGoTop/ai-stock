@@ -208,6 +208,22 @@ export interface HotBoard {
   leaderChangePercent: number
 }
 
+export interface BoardStock {
+  symbol: string
+  name: string
+  price: number
+  changePercent: number
+  amount: number
+  turnover: number
+  volumeRatio: number
+  industry: string
+}
+
+export interface BoardDetail {
+  board: HotBoard
+  stocks: BoardStock[]
+}
+
 export interface HotFeed {
   news: HotNews[]
   topics: HotTopic[]
@@ -498,12 +514,15 @@ export interface NotificationInbox {
 }
 
 export interface CompanionWorkspace {
-  type: 'market' | 'stock' | 'empty' | 'compare' | string
+  type: 'market' | 'stock' | 'empty' | 'compare' | 'sector' | 'topic' | string
   symbol?: string
   name?: string
-  tab?: 'overview' | 'kline' | 'news' | 'analysis' | 'paper' | string
+  tab?: 'overview' | 'kline' | 'news' | 'analysis' | 'paper' | 'constituents' | string
   compareSymbol?: string
   compareName?: string
+  boardCode?: string
+  boardName?: string
+  topic?: string
   riskLevel?: string
   riskSummary?: string
   riskPoints?: string[]

@@ -62,7 +62,18 @@ var themeWords = []string{
 	"可控核聚变", "智能驾驶", "虚拟现实", "鸿蒙", "国产软件", "AI",
 }
 
-var noiseBoard = regexp.MustCompile(`连板|涨停|跌停|昨日|次新|ST|风险警示|退市|融资融券|标准普尔|富时|MSCI|沪股通|深股通|中字头|破净|预盈|预亏|高送转|参股|机构重仓|基金重仓|QFII|社保|举牌|大盘|中盘|小盘|微盘`)
+var noiseBoard = regexp.MustCompile(`连板|涨停|跌停|昨日|次新|退市整理|融资融券|标准普尔|富时|MSCI|沪股通|深股通|中字头|破净|预盈|预亏|高送转|参股|机构重仓|基金重仓|QFII|社保|举牌|大盘|中盘|小盘|微盘`)
+
+// knownBoardCodes 用户常搜、但未必出现在涨跌幅前列的东财板块。
+var knownBoardCodes = map[string]string{
+	"ST":     "BK0511",
+	"*ST":    "BK0511",
+	"ST股":   "BK0511",
+	"ST板":   "BK0511",
+	"风险警示": "BK0511",
+	"风险警示板": "BK0511",
+	"风险警示板块": "BK0511",
+}
 var digestPrefix = regexp.MustCompile(`^【[^】]*】`)
 
 func (b *Bundle) HotNews(limit int) ([]NewsItem, error) {
@@ -178,6 +189,10 @@ func (b *Bundle) HotBoards(limit int) ([]HotBoard, error) {
 		if name == "" || noiseBoard.MatchString(name) {
 			continue
 		}
+		// 热门列表仍不推 ST/风险警示；显式搜索走 FindBoard / knownBoardCodes
+		if isSpecialRiskBoard(name) {
+			continue
+		}
 		out = append(out, HotBoard{
 			Code:                asString(m["f12"]),
 			Name:                name,
@@ -204,13 +219,18 @@ func (b *Bundle) FindBoard(keyword string) (*HotBoard, error) {
 		return nil, fmt.Errorf("empty board keyword")
 	}
 	aliases := boardAliases(keyword)
-	boards, err := b.listBoards(2, 120)
+	if code := knownBoardCode(aliases); code != "" {
+		if hit, err := b.BoardByCode(code); err == nil && hit != nil {
+			return hit, nil
+		}
+	}
+	boards, err := b.listBoards(2, 200)
 	if err == nil {
 		if hit := matchBoard(boards, aliases); hit != nil {
 			return hit, nil
 		}
 	}
-	ind, err2 := b.listBoards(3, 120)
+	ind, err2 := b.listBoards(3, 200)
 	if err2 == nil {
 		if hit := matchBoard(ind, aliases); hit != nil {
 			return hit, nil
@@ -223,6 +243,62 @@ func (b *Bundle) FindBoard(keyword string) (*HotBoard, error) {
 		return nil, err2
 	}
 	return nil, fmt.Errorf("board not found: %s", keyword)
+}
+
+func knownBoardCode(aliases []string) string {
+	for _, a := range aliases {
+		key := strings.ToUpper(strings.TrimSpace(a))
+		if code, ok := knownBoardCodes[a]; ok {
+			return code
+		}
+		if code, ok := knownBoardCodes[key]; ok {
+			return code
+		}
+	}
+	return ""
+}
+
+// BoardByCode 按东财板块代码取快照（如 BK0511=ST股）。
+func (b *Bundle) BoardByCode(code string) (*HotBoard, error) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if code == "" {
+		return nil, fmt.Errorf("empty board code")
+	}
+	if !strings.HasPrefix(code, "BK") {
+		code = "BK" + code
+	}
+	name := ""
+	change := 0.0
+	change5 := 0.0
+	var payload map[string]interface{}
+	secURL := "https://push2.eastmoney.com/api/qt/stock/get?secid=90." + code + "&fltt=2&fields=f57,f58,f169,f170,f109"
+	if err := getJSON(b.Client, secURL, "https://quote.eastmoney.com/", &payload); err == nil {
+		data, _ := payload["data"].(map[string]interface{})
+		if n := asString(data["f58"]); n != "" {
+			name = n
+		}
+		change = asFloat(data["f170"])
+		change5 = asFloat(data["f109"])
+		// 未带 fltt 时涨跌幅常放大 100 倍
+		if change > 30 || change < -30 {
+			change = change / 100
+		}
+	}
+	if name == "" {
+		if code == "BK0511" {
+			name = "ST股"
+		} else {
+			name = code
+		}
+	}
+	stocks, _ := b.BoardStocks(code, 5)
+	out := &HotBoard{Code: code, Name: name, ChangePercent: change, Change5: change5}
+	if len(stocks) > 0 {
+		out.Leader = stocks[0].Name
+		out.LeaderCode = stocks[0].Symbol
+		out.LeaderChangePercent = stocks[0].ChangePercent
+	}
+	return out, nil
 }
 
 func boardAliases(keyword string) []string {
@@ -254,6 +330,11 @@ func boardAliases(keyword string) []string {
 		"证券":   {"券商", "证券"},
 		"有色":   {"有色金属", "铜", "铝", "有色"},
 		"汽车":   {"汽车整车", "新能源汽车", "汽车"},
+		"ST":     {"ST股", "风险警示", "ST"},
+		"ST股":   {"ST", "风险警示", "ST股"},
+		"*ST":    {"ST股", "风险警示", "ST"},
+		"风险警示": {"ST股", "ST", "风险警示板", "风险警示"},
+		"风险警示板": {"ST股", "ST", "风险警示"},
 	}
 	for key, vals := range extra {
 		if k == key || strings.Contains(k, key) {
@@ -359,6 +440,10 @@ func (b *Bundle) listBoards(boardType, limit int) ([]HotBoard, error) {
 		if name == "" || noiseBoard.MatchString(name) {
 			continue
 		}
+		// 热门列表仍不推 ST/风险警示；显式搜索走 FindBoard / knownBoardCodes
+		if isSpecialRiskBoard(name) {
+			continue
+		}
 		out = append(out, HotBoard{
 			Code:                asString(m["f12"]),
 			Name:                name,
@@ -370,6 +455,11 @@ func (b *Bundle) listBoards(boardType, limit int) ([]HotBoard, error) {
 		})
 	}
 	return out, nil
+}
+
+func isSpecialRiskBoard(name string) bool {
+	n := strings.ToUpper(name)
+	return strings.Contains(n, "ST") || strings.Contains(name, "风险警示")
 }
 
 // ListConceptAndIndustryBoards 拉取概念板+行业板候选，供自然语言选股匹配。
@@ -422,26 +512,31 @@ func (b *Bundle) BoardStocks(boardCode string, limit int) ([]BoardStock, error) 
 	}
 	fs := "b:" + boardCode
 	query := fmt.Sprintf(
-		"pn=1&pz=%d&po=1&np=1&fltt=2&invt=2&fid=f3&fs=%s&fields=f12,f14,f2,f3,f6,f8,f10,f100",
+		"pn=1&pz=%d&po=1&np=1&fltt=2&invt=2&fid=f3&fs=%s&fields=f12,f14,f2,f3,f6,f8,f10,f100&ut=fa5fd1943c7b386f172d6893dbfba10b",
 		limit, strings.ReplaceAll(strings.ReplaceAll(fs, ":", "%3A"), "+", "%2B"),
 	)
 	hosts := append([]string{}, emHosts...)
-	hosts = append(hosts, "https://push2his.eastmoney.com", "https://89.push2.eastmoney.com")
+	hosts = append(hosts, "https://push2his.eastmoney.com", "https://89.push2.eastmoney.com", "https://7.push2.eastmoney.com")
 	var payload map[string]interface{}
 	var last error
-	for _, host := range hosts {
-		if err := getJSON(b.Client, host+"/api/qt/clist/get?"+query, "https://quote.eastmoney.com/", &payload); err != nil {
-			last = err
-			continue
+	for attempt := 0; attempt < 2; attempt++ {
+		for _, host := range hosts {
+			if err := getJSON(b.Client, host+"/api/qt/clist/get?"+query, "https://quote.eastmoney.com/center/boardlist.html", &payload); err != nil {
+				last = err
+				continue
+			}
+			data, _ := payload["data"].(map[string]interface{})
+			diff, _ := data["diff"].([]interface{})
+			if len(diff) == 0 {
+				last = fmt.Errorf("board stocks empty")
+				continue
+			}
+			last = nil
+			break
 		}
-		data, _ := payload["data"].(map[string]interface{})
-		diff, _ := data["diff"].([]interface{})
-		if len(diff) == 0 {
-			last = fmt.Errorf("board stocks empty")
-			continue
+		if last == nil {
+			break
 		}
-		last = nil
-		break
 	}
 	if last != nil {
 		return nil, last

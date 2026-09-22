@@ -24,6 +24,7 @@ import type {
   Quote,
   DailyNote,
   HotFeed,
+  BoardDetail,
   NorthboundFlow,
   PaperAccount,
   TodayOpsScan,
@@ -174,6 +175,14 @@ export async function analyzeStockStream(
 
 export function getHotFeed(limit = 15) {
   return get<HotFeed>(`/hot?limit=${limit}`)
+}
+
+export function getBoardDetail(opts: { code?: string; q?: string; limit?: number }) {
+  const params = new URLSearchParams()
+  if (opts.code) params.set('code', opts.code)
+  if (opts.q) params.set('q', opts.q)
+  if (opts.limit) params.set('limit', String(opts.limit))
+  return get<BoardDetail>(`/boards?${params.toString()}`)
 }
 
 export function getStockNews(symbol: string, limit = 8) {

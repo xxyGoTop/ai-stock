@@ -93,7 +93,7 @@ function BlockView({
                 type="button"
                 className="board-row"
                 key={b.code}
-                onClick={() => b.leaderCode && onPick(b.leaderCode, b.leader)}
+                onClick={() => onAction('sector', b.name, b.name)}
               >
                 <span>{b.name}</span>
                 <span className={changeTone(b.changePercent)}>{formatChange(b.changePercent)}</span>
@@ -111,9 +111,15 @@ function BlockView({
           <h4>{block.title || '热点'}</h4>
           <div className="tag-row">
             {items.slice(0, 8).map((t) => (
-              <span className="chip" key={t.topic}>
+              <button
+                type="button"
+                className="chip"
+                key={t.topic}
+                onClick={() => onAction('topic', t.topic, t.topic)}
+              >
                 {t.topic}
-              </span>
+                {t.heat ? ` · ${t.heat}` : ''}
+              </button>
             ))}
           </div>
         </div>

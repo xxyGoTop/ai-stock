@@ -102,6 +102,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/watchlist/items", s.watchItems)
 	mux.HandleFunc("/api/v1/watchlist", s.watchlist)
 	mux.HandleFunc("/api/v1/hot", s.hot)
+	mux.HandleFunc("/api/v1/boards", s.boardDetail)
 	mux.HandleFunc("/api/v1/news", s.stockNews)
 	return s.cors(mux)
 }
@@ -915,6 +916,51 @@ func (s *Server) hot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.OK(w, feed)
+}
+
+// boardDetail GET /api/v1/boards?code=BKxxxx 或 ?q=半导体
+func (s *Server) boardDetail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		response.Error(w, http.StatusMethodNotAllowed, "GET only")
+		return
+	}
+	code := strings.TrimSpace(r.URL.Query().Get("code"))
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	limit := 30
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 80 {
+			limit = n
+		}
+	}
+
+	var board *provider.HotBoard
+	if code != "" {
+		b, err := s.bundle.BoardByCode(code)
+		if err != nil || b == nil {
+			response.Error(w, http.StatusNotFound, "board code not found")
+			return
+		}
+		board = b
+	} else if q != "" {
+		b, err := s.bundle.FindBoard(q)
+		if err != nil || b == nil {
+			response.Error(w, http.StatusNotFound, "board not found: "+q)
+			return
+		}
+		board = b
+	} else {
+		response.Error(w, http.StatusBadRequest, "code or q required")
+		return
+	}
+
+	stocks, err := s.bundle.BoardStocks(board.Code, limit)
+	if err != nil {
+		stocks = []provider.BoardStock{}
+	}
+	response.OK(w, map[string]interface{}{
+		"board":  board,
+		"stocks": stocks,
+	})
 }
 
 func (s *Server) stockNews(w http.ResponseWriter, r *http.Request) {

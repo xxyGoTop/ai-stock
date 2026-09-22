@@ -90,9 +90,10 @@ func picksFromBoardStocks(boardName string, stocks []provider.BoardStock, limit 
 	if limit <= 0 {
 		limit = 30
 	}
+	allowST := isRiskBoardName(boardName)
 	out := make([]RecommendPick, 0, limit)
 	for _, st := range stocks {
-		if strings.Contains(strings.ToUpper(st.Name), "ST") {
+		if !allowST && strings.Contains(strings.ToUpper(st.Name), "ST") {
 			continue
 		}
 		out = append(out, RecommendPick{
@@ -107,6 +108,11 @@ func picksFromBoardStocks(boardName string, stocks []provider.BoardStock, limit 
 		}
 	}
 	return out
+}
+
+func isRiskBoardName(name string) bool {
+	n := strings.ToUpper(strings.TrimSpace(name))
+	return strings.Contains(n, "ST") || strings.Contains(name, "风险警示")
 }
 
 func (s *Service) askScreeningNL(msg string, boards []provider.HotBoard, modelCode string) (*screeningNLResult, error) {
@@ -269,7 +275,8 @@ func (s *Service) recommendInBoard(action, msg, hint string) (*ChatResponse, err
 		Intent: "recommend",
 		Blocks: blocks,
 		Workspace: &WorkspaceHint{
-			Type: "stock", Symbol: picks[0].Symbol, Name: picks[0].Name, Tab: "overview",
+			Type: "sector", Symbol: matched[0].Code, Name: matched[0].Name, Tab: "overview",
+			BoardCode: matched[0].Code, BoardName: matched[0].Name, Topic: hintOr(boardLabel, hint),
 		},
 	}, nil
 }
@@ -400,15 +407,9 @@ func (s *Service) screenInBoard(msg, hint string) (*ChatResponse, error) {
 		{Type: "boards", Title: "目标板块", Items: matched},
 		{Type: "suggestions", Items: []string{fmt.Sprintf("在%s推荐", hintOr(boardLabel, hint)), "今日热点", "帮我选股"}},
 	}
-	ws := &WorkspaceHint{Type: "market", Tab: "overview"}
-	if len(picks) > 0 {
-		if m, ok := picks[0].(map[string]interface{}); ok {
-			sym, _ := m["symbol"].(string)
-			name, _ := m["name"].(string)
-			if sym != "" {
-				ws = &WorkspaceHint{Type: "stock", Symbol: provider.PadSymbol(sym), Name: name, Tab: "overview"}
-			}
-		}
+	ws := &WorkspaceHint{
+		Type: "sector", Symbol: matched[0].Code, Name: matched[0].Name, Tab: "overview",
+		BoardCode: matched[0].Code, BoardName: matched[0].Name, Topic: hintOr(boardLabel, hint),
 	}
 	return &ChatResponse{Reply: reply, Intent: "screening", Blocks: blocks, Workspace: ws}, nil
 }

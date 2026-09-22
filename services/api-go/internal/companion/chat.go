@@ -62,6 +62,12 @@ func (s *Service) Chat(req ChatRequest) (*ChatResponse, error) {
 		res, err = s.analyzeStock(symbol, msg, req)
 	case "compare":
 		res, err = s.compareStocks(msg, symbol)
+	case "sector", "topic", "board":
+		preferred := strings.TrimSpace(symbol)
+		if preferred == "" || extractSymbol(preferred) != "" {
+			preferred = extractSectorHint(msg)
+		}
+		res, err = s.studySector(msg, preferred)
 	case "watch":
 		res, err = s.addWatch(symbol, msg)
 	case "unwatch":
@@ -217,6 +223,19 @@ func (s *Service) afterChatMemory(req ChatRequest, res *ChatResponse) {
 		if ws.Type == "stock" && ws.Symbol != "" {
 			s.mem.RecordResearch(ws.Symbol, "symbol", ws.Name)
 		}
+		if ws.Type == "sector" || ws.Type == "topic" {
+			key := ws.BoardCode
+			if key == "" {
+				key = ws.Symbol
+			}
+			label := ws.BoardName
+			if label == "" {
+				label = ws.Name
+			}
+			if key != "" {
+				s.mem.RecordResearch(key, ws.Type, label)
+			}
+		}
 		if ws.Type == "compare" {
 			if ws.Symbol != "" {
 				s.mem.RecordResearch(ws.Symbol, "symbol", ws.Name)
@@ -265,6 +284,11 @@ func detectIntent(msg, symbol string) string {
 		return "review"
 	case looksLikeScreening(msg):
 		return "screening"
+	case looksLikeSectorStudy(msg):
+		if looksLikeTopicStudy(msg) {
+			return "topic"
+		}
+		return "sector"
 	case looksLikeHot(msg):
 		return "hot"
 	case strings.Contains(msg, "推荐"):
@@ -295,11 +319,15 @@ func detectIntent(msg, symbol string) string {
 }
 
 func looksLikeMarket(msg string) bool {
-	keys := []string{"市场", "行情", "大盘", "指数", "板块", "北向", "今天怎么", "今日行情", "今日市场"}
+	// 「板块」单独出现且带具体名时走 sector，不在这里抢意图
+	keys := []string{"市场", "行情", "大盘", "指数", "北向", "今天怎么", "今日行情", "今日市场"}
 	for _, k := range keys {
 		if strings.Contains(msg, k) {
 			return true
 		}
+	}
+	if strings.Contains(msg, "板块") && extractSectorHint(msg) == "" {
+		return true
 	}
 	return false
 }

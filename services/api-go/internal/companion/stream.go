@@ -97,6 +97,13 @@ func (s *Service) ChatStream(ctx context.Context, req ChatRequest, emit EmitFunc
 	case "compare":
 		res, err = s.compareStocks(msg, symbol)
 		s.emitStaticRun(emit, plan, res, err)
+	case "sector", "topic", "board":
+		preferred := strings.TrimSpace(symbol)
+		if preferred == "" || extractSymbol(preferred) != "" {
+			preferred = extractSectorHint(msg)
+		}
+		res, err = s.studySector(msg, preferred)
+		s.emitStaticRun(emit, plan, res, err)
 	case "watch":
 		res, err = s.addWatch(symbol, msg)
 		s.emitStaticRun(emit, plan, res, err)
@@ -214,6 +221,13 @@ func planForAction(action string) []PlanStep {
 			{ID: "quotes", Title: "拉取双侧行情", Status: "pending"},
 			{ID: "tech", Title: "对比技术指标", Status: "pending"},
 			{ID: "summary", Title: "整理差异说明", Status: "pending"},
+		}
+	case "sector", "topic", "board":
+		return []PlanStep{
+			{ID: "resolve", Title: "定位板块 / 题材", Status: "pending"},
+			{ID: "stocks", Title: "拉取成分股", Status: "pending"},
+			{ID: "news", Title: "相关快讯", Status: "pending"},
+			{ID: "summary", Title: "整理研究摘要", Status: "pending"},
 		}
 	case "watch_anomaly", "anomaly":
 		return []PlanStep{

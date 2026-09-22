@@ -41,6 +41,7 @@ import {
 } from '../components/LayoutIcons'
 import PaperTicket from '../components/PaperTicket'
 import ResearchProgress, { AgentStatusBar, type ToolLine } from '../components/ResearchProgress'
+import SectorWorkspace from '../components/SectorWorkspace'
 import SessionSidebar from '../components/SessionSidebar'
 import WatchButton from '../components/WatchButton'
 import {
@@ -726,6 +727,9 @@ export default function Chat() {
       watch_anomaly: '看看自选异动',
       tomorrow_plan: `把 ${label || symbol || ''} 加入明日计划`,
       today_ops: '今日操作',
+      sector: `看看${label || symbol || ''}板块`,
+      topic: `打开${label || symbol || ''}题材`,
+      board: `看看${label || symbol || ''}板块`,
     }
     void send(map[action] || action, { symbol, action })
   }
@@ -1031,7 +1035,9 @@ export default function Chat() {
                     ? `${workspace.name || quote?.name || ''} ${workspace.symbol || ''}`
                     : workspace.type === 'compare'
                       ? `${workspace.name || quote?.name || ''} VS ${workspace.compareName || compareQuote?.name || workspace.compareSymbol || ''}`
-                      : '今日市场'}
+                      : workspace.type === 'sector' || workspace.type === 'topic'
+                        ? `${workspace.boardName || workspace.name || workspace.topic || ''} ${workspace.type === 'topic' ? '题材' : '板块'}`
+                        : '今日市场'}
                 </p>
               </div>
               <div className="workspace-head-actions">
@@ -1076,7 +1082,19 @@ export default function Chat() {
               </div>
             </header>
 
-            {workspace.type !== 'stock' && workspace.type !== 'compare' && briefing && (
+            {(workspace.type === 'sector' || workspace.type === 'topic') && (
+              <SectorWorkspace
+                workspace={workspace}
+                onPick={onPickSymbol}
+                onSuggest={(text) => void send(text)}
+              />
+            )}
+
+            {workspace.type !== 'stock' &&
+              workspace.type !== 'compare' &&
+              workspace.type !== 'sector' &&
+              workspace.type !== 'topic' &&
+              briefing && (
               <div className="workspace-market">
                 <div className="index-grid">
                   {briefing.indices.map((q) => (
@@ -1109,7 +1127,7 @@ export default function Chat() {
                         type="button"
                         className="board-row"
                         key={b.code}
-                        onClick={() => b.leaderCode && onPickSymbol(b.leaderCode, b.leader)}
+                        onClick={() => onAction('sector', b.name, b.name)}
                       >
                         <span>{b.name}</span>
                         <span className={b.changePercent >= 0 ? 'up' : 'down'}>
