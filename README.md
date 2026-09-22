@@ -100,7 +100,7 @@ Go API :18080
 7. **Notification Agent**：Go 后台定时扫描自选异动与今日操作，指纹去重写入 `data/notifications.json`；对话拉 `GET /api/v1/notifications` 并 `PATCH` 已读
 8. **会话持久化**：`GET/PUT /api/v1/conversations` + `POST /api/v1/research/events`；本地 sessionStorage 作缓存，启动时与服务端同步
 9. **对比 / 风险块**：意图「对比」产出 comparison 表；分析附带 risk 卡；右侧 Workspace 支持 VS 视图
-10. **板块内选股/推荐**：说「在半导体选股」「在新能源推荐」会匹配概念/行业板并在成分内筛选
+10. **板块内选股/推荐**：说「在半导体选股」「在新能源推荐」会匹配概念/行业板并在成分内筛选；找不到精确板名时走 **选股理解员**（方舟模型）推理相关板块再跑五算法
 
 建议下一步：
 

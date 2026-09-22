@@ -7,7 +7,7 @@ prompts/
   loader.py            扫描目录、渲染 {{变量}}
   stock_analyst/       个股分析（已接入分析 Profile）
   trading_planner/     交易计划（预留）
-  screening_nl/        自然语言选股（预留）
+  screening_nl/        自然语言选股理解（板块匹配 + 算法选择）
   news_digest/         新闻摘要（预留）
   ensemble_judge/      多模型裁判（预留）
 ```

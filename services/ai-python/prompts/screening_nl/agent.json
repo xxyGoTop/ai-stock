@@ -5,5 +5,5 @@
   "role": "screener",
   "version": "1.0",
   "enabled": true,
-  "description": "把自然语言选股条件转成算法编码和过滤项"
+  "description": "把自然语言选股条件转成算法编码，并匹配东财概念/行业板块"
 }

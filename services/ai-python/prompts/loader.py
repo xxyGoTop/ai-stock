@@ -97,13 +97,20 @@ def context_vars(context: dict) -> dict:
         name = hit.get("short") or hit.get("name") or hit.get("algorithmCode")
         lines.append(f"- {name} {flag}：{hit.get('reason') or ''}")
     slim = {key: context.get(key) for key in ("stock", "indicators", "rps", "algorithmHits") if key in context}
-    return {
+    out = {
         "stock": stock,
         "indicators": indicators,
         "rps": context.get("rps") or {},
         "algorithm_lines": "\n".join(lines) or "- 无算法结果",
         "context_json": json.dumps(slim, ensure_ascii=False)[:6000],
+        "query": str(context.get("query") or ""),
     }
+    # 选股理解等场景可直接传入 context_json / query
+    if context.get("context_json"):
+        out["context_json"] = str(context["context_json"])[:8000]
+    if context.get("query"):
+        out["query"] = str(context["query"])
+    return out
 
 
 def _agent_codes() -> list[str]:

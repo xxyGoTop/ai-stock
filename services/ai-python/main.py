@@ -5,6 +5,7 @@ from agent.daily_note import daily_note
 from agent.research import analyze_stock
 from llm.chat import chat_reply
 from llm.config import list_models, list_profiles
+from llm.screening_nl import parse_screening_nl
 from prompts.loader import list_agents
 from quant.algorithms.registry import list_algorithms
 from quant.screening.engine import run_screening
@@ -54,6 +55,12 @@ class ChatRequest(BaseModel):
     modelCode: str | None = None
 
 
+class ScreeningNLRequest(BaseModel):
+    query: str
+    boards: list[dict] | None = None
+    modelCode: str | None = None
+
+
 @app.get("/v1/llm/models")
 def llm_models():
     return {"items": list_models()}
@@ -82,6 +89,14 @@ def chat(req: ChatRequest):
     try:
         history = [t.model_dump() for t in req.messages or []]
         return chat_reply(req.message, history, req.modelCode)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/v1/ai/screening-nl")
+def screening_nl(req: ScreeningNLRequest):
+    try:
+        return parse_screening_nl(req.query, req.boards, req.modelCode)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

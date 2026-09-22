@@ -237,8 +237,11 @@ func boardAliases(keyword string) []string {
 		"新能源": {"光伏", "锂电", "储能", "新能源车", "新能源"},
 		"光伏":   {"新能源", "光伏"},
 		"锂电":   {"新能源", "锂电池", "锂电"},
-		"创新药": {"医药", "生物制药", "创新药"},
-		"医药":   {"创新药", "生物制药", "医药"},
+		"创新药":  {"医药", "生物制药", "化学制药", "生物制品", "创新药", "CXO"},
+		"医药":    {"创新药", "生物制药", "化学制药", "中药", "生物制品", "医疗器械", "医疗服务", "医药商业", "化学原料药", "疫苗", "医药"},
+		"医疗":    {"医疗器械", "医疗服务", "医药", "化学制药"},
+		"中药":    {"中药", "医药"},
+		"制药":    {"化学制药", "生物制药", "医药"},
 		"AI":    {"人工智能", "算力", "AI应用", "AI"},
 		"人工智能": {"AI", "算力", "人工智能"},
 		"算力":   {"人工智能", "AI", "算力"},
@@ -294,6 +297,27 @@ func matchBoard(boards []HotBoard, aliases []string) *HotBoard {
 			}
 		}
 	}
+	// 弱匹配：别名与板块名有 2 字以上公共子串（如 医药↔化学制药 靠「药」不够；靠「制药」）
+	for _, a := range aliases {
+		runes := []rune(a)
+		if len(runes) < 2 {
+			continue
+		}
+		for n := len(runes); n >= 2; n-- {
+			for i := 0; i+n <= len(runes); i++ {
+				sub := string(runes[i : i+n])
+				if len([]rune(sub)) < 2 {
+					continue
+				}
+				for j := range boards {
+					if strings.Contains(boards[j].Name, sub) {
+						b := boards[j]
+						return &b
+					}
+				}
+			}
+		}
+	}
 	return nil
 }
 
@@ -344,6 +368,42 @@ func (b *Bundle) listBoards(boardType, limit int) ([]HotBoard, error) {
 			LeaderCode:          cleanLeader(asString(m["f140"])),
 			LeaderChangePercent: asFloat(m["f136"]),
 		})
+	}
+	return out, nil
+}
+
+// ListConceptAndIndustryBoards 拉取概念板+行业板候选，供自然语言选股匹配。
+func (b *Bundle) ListConceptAndIndustryBoards(limit int) ([]HotBoard, error) {
+	if limit <= 0 {
+		limit = 120
+	}
+	out := make([]HotBoard, 0, limit*2)
+	seen := map[string]bool{}
+	add := func(list []HotBoard, err error) {
+		if err != nil {
+			return
+		}
+		for _, x := range list {
+			key := x.Code + "|" + x.Name
+			if x.Name == "" || seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, x)
+		}
+	}
+	c, err1 := b.listBoards(2, limit)
+	add(c, err1)
+	i, err2 := b.listBoards(3, limit)
+	add(i, err2)
+	if len(out) == 0 {
+		if err1 != nil {
+			return nil, err1
+		}
+		if err2 != nil {
+			return nil, err2
+		}
+		return nil, fmt.Errorf("boards empty")
 	}
 	return out, nil
 }
