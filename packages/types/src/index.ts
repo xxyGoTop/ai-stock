@@ -481,10 +481,16 @@ export interface NotificationInbox {
 }
 
 export interface CompanionWorkspace {
-  type: 'market' | 'stock' | 'empty' | string
+  type: 'market' | 'stock' | 'empty' | 'compare' | string
   symbol?: string
   name?: string
   tab?: 'overview' | 'kline' | 'news' | 'analysis' | 'paper' | string
+  compareSymbol?: string
+  compareName?: string
+  riskLevel?: string
+  riskSummary?: string
+  riskPoints?: string[]
+  riskAction?: string
 }
 
 export interface CompanionChatResponse {

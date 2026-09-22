@@ -68,10 +68,12 @@ type Briefing struct {
 }
 
 type WorkspaceHint struct {
-	Type   string `json:"type"` // market | stock | empty
-	Symbol string `json:"symbol,omitempty"`
-	Name   string `json:"name,omitempty"`
-	Tab    string `json:"tab,omitempty"` // overview | kline | analysis | paper
+	Type          string `json:"type"` // market | stock | empty | compare
+	Symbol        string `json:"symbol,omitempty"`
+	Name          string `json:"name,omitempty"`
+	Tab           string `json:"tab,omitempty"` // overview | kline | analysis | paper
+	CompareSymbol string `json:"compareSymbol,omitempty"`
+	CompareName   string `json:"compareName,omitempty"`
 }
 
 type ChatTurn struct {

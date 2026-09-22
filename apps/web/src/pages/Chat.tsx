@@ -66,6 +66,7 @@ const QUICK = [
   { label: '自选', message: '我的自选', action: 'watchlist' },
   { label: '明日计划', message: '明日计划', action: 'tomorrow_plan' },
   { label: '今日操作', message: '今日操作', action: 'today_ops' },
+  { label: '对比', message: '茅台和比亚迪对比', action: 'compare' },
   { label: '异动', message: '看看自选异动', action: 'watch_anomaly' },
 ]
 
@@ -207,6 +208,7 @@ export default function Chat() {
   const [workspace, setWorkspace] = useState<CompanionWorkspace>(first.workspace)
   const [briefing, setBriefing] = useState<CompanionBriefing | null>(first.briefing)
   const [quote, setQuote] = useState<Quote | null>(null)
+  const [compareQuote, setCompareQuote] = useState<Quote | null>(null)
   const [bars, setBars] = useState<KlineBar[]>([])
   const [series, setSeries] = useState<IndicatorPoint[]>([])
   const [stockNews, setStockNews] = useState<StockNewsFeed | null>(null)
@@ -425,6 +427,23 @@ export default function Chat() {
   }, [loading])
 
   useEffect(() => {
+    if (workspace.type === 'compare' && workspace.symbol && workspace.compareSymbol) {
+      let cancelled = false
+      setBars([])
+      setSeries([])
+      setStockNews(null)
+      Promise.all([getStock(workspace.symbol), getStock(workspace.compareSymbol)])
+        .then(([a, b]) => {
+          if (cancelled) return
+          setQuote(a)
+          setCompareQuote(b)
+        })
+        .catch(() => undefined)
+      return () => {
+        cancelled = true
+      }
+    }
+    setCompareQuote(null)
     if (workspace.type !== 'stock' || !workspace.symbol) {
       setQuote(null)
       setBars([])
@@ -459,7 +478,7 @@ export default function Chat() {
     return () => {
       cancelled = true
     }
-  }, [workspace.type, workspace.symbol])
+  }, [workspace.type, workspace.symbol, workspace.compareSymbol])
 
   function handleStreamEvent(ev: AgentStreamEvent) {
     switch (ev.event) {
@@ -649,7 +668,20 @@ export default function Chat() {
       const root = base || messages
       return [...root, assistant]
     })
-    if (res.workspace) setWorkspace(res.workspace)
+    if (res.workspace) {
+      const risk = res.blocks?.find((b) => b.type === 'risk')
+      const meta = (risk?.meta || {}) as { level?: string; action?: string }
+      const points = Array.isArray(risk?.items)
+        ? (risk!.items as unknown[]).map((x) => (typeof x === 'string' ? x : '')).filter(Boolean)
+        : []
+      setWorkspace({
+        ...res.workspace,
+        riskLevel: meta.level || res.workspace.riskLevel,
+        riskSummary: risk?.text || res.workspace.riskSummary,
+        riskPoints: points.length ? points : res.workspace.riskPoints,
+        riskAction: meta.action || res.workspace.riskAction,
+      })
+    }
   }
 
   function onSubmit(e: FormEvent) {
@@ -971,7 +1003,9 @@ export default function Chat() {
                 <p className="muted">
                   {workspace.type === 'stock'
                     ? `${workspace.name || quote?.name || ''} ${workspace.symbol || ''}`
-                    : '今日市场'}
+                    : workspace.type === 'compare'
+                      ? `${workspace.name || quote?.name || ''} VS ${workspace.compareName || compareQuote?.name || workspace.compareSymbol || ''}`
+                      : '今日市场'}
                 </p>
               </div>
               <div className="workspace-head-actions">
@@ -1016,7 +1050,7 @@ export default function Chat() {
               </div>
             </header>
 
-            {workspace.type !== 'stock' && briefing && (
+            {workspace.type !== 'stock' && workspace.type !== 'compare' && briefing && (
               <div className="workspace-market">
                 <div className="index-grid">
                   {briefing.indices.map((q) => (
@@ -1143,7 +1177,29 @@ export default function Chat() {
 
                 {tab === 'analysis' && quote && (
                   <div className="workspace-block">
-                    <p className="muted">完整分析结论在左侧对话中。可继续追问或切换到模拟交易。</p>
+                    {workspace.riskSummary ? (
+                      <div className={`ws-risk level-${workspace.riskLevel || 'medium'}`}>
+                        <div className="risk-head">
+                          <h3>风险提示</h3>
+                          <span className={`risk-badge ${workspace.riskLevel || 'medium'}`}>
+                            {{ low: '偏低', medium: '中等', high: '偏高', notable: '需关注' }[
+                              workspace.riskLevel || 'medium'
+                            ] || workspace.riskLevel}
+                          </span>
+                        </div>
+                        <p>{workspace.riskSummary}</p>
+                        {workspace.riskAction ? <p className="muted">建议：{workspace.riskAction}</p> : null}
+                        {workspace.riskPoints && workspace.riskPoints.length > 0 ? (
+                          <ul className="risk-points">
+                            {workspace.riskPoints.map((p) => (
+                              <li key={p}>{p}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="muted">完整分析结论在左侧对话中。可继续追问或切换到模拟交易。</p>
+                    )}
                     <div className="action-row">
                       <button
                         type="button"
@@ -1173,6 +1229,103 @@ export default function Chat() {
                 {tab === 'paper' && quote && (
                   <PaperTicket symbol={quote.symbol} name={quote.name} price={quote.price} />
                 )}
+              </div>
+            )}
+
+            {workspace.type === 'compare' && (
+              <div className="workspace-compare">
+                <div className="compare-heads ws">
+                  <button
+                    type="button"
+                    className="compare-side"
+                    onClick={() => quote && onPickSymbol(quote.symbol, quote.name)}
+                  >
+                    <strong>{quote?.name || workspace.name || 'A'}</strong>
+                    <span className="muted">{quote?.symbol || workspace.symbol}</span>
+                    {quote && (
+                      <span className={quote.changePercent >= 0 ? 'up' : 'down'}>
+                        {quote.price.toFixed(2)} {quote.changePercent >= 0 ? '+' : ''}
+                        {quote.changePercent.toFixed(2)}%
+                      </span>
+                    )}
+                  </button>
+                  <span className="compare-vs">VS</span>
+                  <button
+                    type="button"
+                    className="compare-side"
+                    onClick={() =>
+                      (compareQuote || workspace.compareSymbol) &&
+                      onPickSymbol(
+                        compareQuote?.symbol || workspace.compareSymbol || '',
+                        compareQuote?.name || workspace.compareName,
+                      )
+                    }
+                  >
+                    <strong>{compareQuote?.name || workspace.compareName || 'B'}</strong>
+                    <span className="muted">{compareQuote?.symbol || workspace.compareSymbol}</span>
+                    {compareQuote && (
+                      <span className={compareQuote.changePercent >= 0 ? 'up' : 'down'}>
+                        {compareQuote.price.toFixed(2)} {compareQuote.changePercent >= 0 ? '+' : ''}
+                        {compareQuote.changePercent.toFixed(2)}%
+                      </span>
+                    )}
+                  </button>
+                </div>
+                {quote && compareQuote && (
+                  <table className="compare-table">
+                    <tbody>
+                      <tr>
+                        <td className="muted">涨跌幅</td>
+                        <td className={quote.changePercent >= compareQuote.changePercent ? 'win' : undefined}>
+                          {quote.changePercent >= 0 ? '+' : ''}
+                          {quote.changePercent.toFixed(2)}%
+                        </td>
+                        <td className={compareQuote.changePercent > quote.changePercent ? 'win' : undefined}>
+                          {compareQuote.changePercent >= 0 ? '+' : ''}
+                          {compareQuote.changePercent.toFixed(2)}%
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="muted">换手率</td>
+                        <td>{quote.turnover?.toFixed(2) ?? '—'}%</td>
+                        <td>{compareQuote.turnover?.toFixed(2) ?? '—'}%</td>
+                      </tr>
+                      <tr>
+                        <td className="muted">量比</td>
+                        <td>{quote.volumeRatio?.toFixed(2) ?? '—'}</td>
+                        <td>{compareQuote.volumeRatio?.toFixed(2) ?? '—'}</td>
+                      </tr>
+                      <tr>
+                        <td className="muted">行业</td>
+                        <td>{quote.industry || '—'}</td>
+                        <td>{compareQuote.industry || '—'}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
+                {workspace.riskSummary ? (
+                  <div className={`ws-risk level-${workspace.riskLevel || 'notable'}`}>
+                    <h3>风险提示</h3>
+                    <p>{workspace.riskSummary}</p>
+                  </div>
+                ) : null}
+                <div className="action-row">
+                  {quote && (
+                    <button type="button" className="pill" onClick={() => onAction('analyze', quote.symbol, quote.name)}>
+                      分析{quote.name}
+                    </button>
+                  )}
+                  {compareQuote && (
+                    <button
+                      type="button"
+                      className="pill"
+                      onClick={() => onAction('analyze', compareQuote.symbol, compareQuote.name)}
+                    >
+                      分析{compareQuote.name}
+                    </button>
+                  )}
+                </div>
+                <p className="muted">完整对比表与解读在左侧对话中。</p>
               </div>
             )}
 

@@ -347,6 +347,113 @@ function BlockView({
         </div>
       )
     }
+    case 'risk': {
+      const meta = (block.meta || {}) as { level?: string; action?: string; score?: number }
+      const level = String(meta.level || 'medium')
+      const points = Array.isArray(block.items)
+        ? (block.items as unknown[]).map((x) => (typeof x === 'string' ? x : String((x as { text?: string })?.text || ''))).filter(Boolean)
+        : []
+      const levelLabel: Record<string, string> = { low: '偏低', medium: '中等', high: '偏高', notable: '需关注' }
+      return (
+        <div className={`cblock risk-block level-${level}`}>
+          <div className="risk-head">
+            <h4>{block.title || '风险提示'}</h4>
+            <span className={`risk-badge ${level}`}>{levelLabel[level] || level}</span>
+          </div>
+          {block.text && <p>{block.text}</p>}
+          {typeof meta.score === 'number' && meta.score > 0 ? (
+            <p className="muted">综合分数 {meta.score}{meta.action ? ` · 建议 ${meta.action}` : ''}</p>
+          ) : meta.action ? (
+            <p className="muted">建议：{meta.action}</p>
+          ) : null}
+          {points.length > 0 && (
+            <ul className="risk-points">
+              {points.map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ul>
+          )}
+          {block.symbol && (
+            <div className="action-row tight">
+              <button type="button" className="pill" onClick={() => onAction('analyze', block.symbol)}>
+                再看分析
+              </button>
+              <button type="button" className="pill" onClick={() => onAction('kline', block.symbol)}>
+                打开 K 线
+              </button>
+            </div>
+          )}
+        </div>
+      )
+    }
+    case 'comparison': {
+      const meta = (block.meta || {}) as {
+        left?: { symbol?: string; name?: string; price?: number; changePercent?: number }
+        right?: { symbol?: string; name?: string; price?: number; changePercent?: number }
+      }
+      const left = meta.left || {}
+      const right = meta.right || {}
+      const rows = Array.isArray(block.items)
+        ? (block.items as { metric?: string; left?: string; right?: string; winner?: string }[])
+        : []
+      return (
+        <div className="cblock comparison-block">
+          <h4>{block.title || '股票对比'}</h4>
+          {block.text && <p className="compare-summary">{block.text}</p>}
+          <div className="compare-heads">
+            <button type="button" className="compare-side" onClick={() => left.symbol && onPick(left.symbol, left.name)}>
+              <strong>{left.name || 'A'}</strong>
+              <span className="muted">{left.symbol}</span>
+              {typeof left.price === 'number' && (
+                <span className={changeTone(left.changePercent || 0)}>
+                  {left.price.toFixed(2)} {formatChange(left.changePercent || 0)}
+                </span>
+              )}
+            </button>
+            <span className="compare-vs">VS</span>
+            <button type="button" className="compare-side" onClick={() => right.symbol && onPick(right.symbol, right.name)}>
+              <strong>{right.name || 'B'}</strong>
+              <span className="muted">{right.symbol}</span>
+              {typeof right.price === 'number' && (
+                <span className={changeTone(right.changePercent || 0)}>
+                  {right.price.toFixed(2)} {formatChange(right.changePercent || 0)}
+                </span>
+              )}
+            </button>
+          </div>
+          <table className="compare-table">
+            <thead>
+              <tr>
+                <th>维度</th>
+                <th>{left.name || 'A'}</th>
+                <th>{right.name || 'B'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.metric}>
+                  <td className="muted">{r.metric}</td>
+                  <td className={r.winner === 'left' ? 'win' : undefined}>{r.left}</td>
+                  <td className={r.winner === 'right' ? 'win' : undefined}>{r.right}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="action-row tight">
+            {left.symbol && (
+              <button type="button" className="pill" onClick={() => onAction('analyze', left.symbol, left.name)}>
+                分析{left.name}
+              </button>
+            )}
+            {right.symbol && (
+              <button type="button" className="pill" onClick={() => onAction('analyze', right.symbol, right.name)}>
+                分析{right.name}
+              </button>
+            )}
+          </div>
+        </div>
+      )
+    }
     case 'analysis':
     case 'daily_note':
       return (

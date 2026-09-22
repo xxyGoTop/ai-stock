@@ -47,6 +47,8 @@ func (s *Service) Chat(req ChatRequest) (*ChatResponse, error) {
 		return s.recommend(action, msg)
 	case "analyze":
 		return s.analyzeStock(symbol, msg, req)
+	case "compare":
+		return s.compareStocks(msg, symbol)
 	case "watch":
 		return s.addWatch(symbol, msg)
 	case "unwatch":
@@ -165,6 +167,8 @@ func detectIntent(msg, symbol string) string {
 		return "tomorrow_plan"
 	case strings.Contains(msg, "异动") || strings.Contains(msg, "自选提醒") || strings.Contains(msg, "盯盘"):
 		return "watch_anomaly"
+	case looksLikeCompare(msg):
+		return "compare"
 	case strings.Contains(msg, "我的自选") || msg == "自选股" || strings.Contains(msg, "自选列表") || strings.Contains(msg, "看看自选"):
 		return "watchlist"
 	case looksLikeMarket(msg) && sym == "":
@@ -563,6 +567,9 @@ func (s *Service) analyzeStock(symbol, msg string, req ChatRequest) (*ChatRespon
 		var analysis interface{}
 		if json.Unmarshal(raw, &analysis) == nil {
 			blocks = append(blocks, Block{Type: "analysis", Title: "AI 解读", Data: analysis, Symbol: symbol})
+			if rb := buildRiskBlock(symbol, analysis); rb != nil {
+				blocks = append(blocks, *rb)
+			}
 		}
 	}
 

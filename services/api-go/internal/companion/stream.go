@@ -52,6 +52,8 @@ func (s *Service) ChatStream(ctx context.Context, req ChatRequest, emit EmitFunc
 			action = "briefing"
 		} else if looksLikeRecommend(msg) {
 			action = "recommend"
+		} else if looksLikeCompare(msg) {
+			action = "compare"
 		} else if strings.Contains(msg, "异动") || strings.Contains(msg, "盯盘") {
 			action = "watch_anomaly"
 		} else {
@@ -90,6 +92,9 @@ func (s *Service) ChatStream(ctx context.Context, req ChatRequest, emit EmitFunc
 		res, err = s.streamRecommend(ctx, emit, plan, action)
 	case "analyze":
 		res, err = s.streamAnalyze(ctx, emit, plan, symbol, msg, req)
+	case "compare":
+		res, err = s.compareStocks(msg, symbol)
+		s.emitStaticRun(emit, plan, res, err)
 	case "watch":
 		res, err = s.addWatch(symbol, msg)
 		s.emitStaticRun(emit, plan, res, err)
@@ -186,6 +191,13 @@ func planForAction(action string) []PlanStep {
 			{ID: "news", Title: "个股新闻与公告", Status: "pending"},
 			{ID: "ai", Title: "AI 解读整理", Status: "pending"},
 			{ID: "actions", Title: "准备后续动作", Status: "pending"},
+		}
+	case "compare":
+		return []PlanStep{
+			{ID: "resolve", Title: "识别对比标的", Status: "pending"},
+			{ID: "quotes", Title: "拉取双侧行情", Status: "pending"},
+			{ID: "tech", Title: "对比技术指标", Status: "pending"},
+			{ID: "summary", Title: "整理差异说明", Status: "pending"},
 		}
 	case "watch_anomaly", "anomaly":
 		return []PlanStep{
@@ -600,6 +612,10 @@ func (s *Service) streamAnalyze(ctx context.Context, emit EmitFunc, plan []PlanS
 			b := Block{Type: "analysis", Title: "AI 解读", Data: analysis, Symbol: symbol}
 			blocks = append(blocks, b)
 			emitBlock(emit, b)
+			if rb := buildRiskBlock(symbol, analysis); rb != nil {
+				blocks = append(blocks, *rb)
+				emitBlock(emit, *rb)
+			}
 			toolResult(emit, "ai_analyze", "AI 解读", true, "解读完成", nil, "")
 		} else {
 			toolResult(emit, "ai_analyze", "AI 解读", false, "", nil, "解析失败")
