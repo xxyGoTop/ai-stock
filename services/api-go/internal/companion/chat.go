@@ -42,8 +42,14 @@ func (s *Service) Chat(req ChatRequest) (*ChatResponse, error) {
 	case "hot":
 		return s.hotFeed()
 	case "screening":
+		if hint := extractBoardHint(msg); hint != "" {
+			return s.screenInBoard(msg, hint)
+		}
 		return s.runScreening()
 	case "recommend", "preopen", "intraday", "close_auction", "review":
+		if hint := extractBoardHint(msg); hint != "" {
+			return s.recommendInBoard(action, msg, hint)
+		}
 		return s.recommend(action, msg)
 	case "analyze":
 		return s.analyzeStock(symbol, msg, req)
@@ -82,13 +88,19 @@ func (s *Service) Chat(req ChatRequest) (*ChatResponse, error) {
 			return s.hotFeed()
 		}
 		if looksLikeScreening(msg) {
+			if hint := extractBoardHint(msg); hint != "" {
+				return s.screenInBoard(msg, hint)
+			}
 			return s.runScreening()
+		}
+		if looksLikeRecommend(msg) {
+			if hint := extractBoardHint(msg); hint != "" {
+				return s.recommendInBoard("recommend", msg, hint)
+			}
+			return s.recommend("recommend", msg)
 		}
 		if looksLikeMarket(msg) {
 			return s.Chat(ChatRequest{Message: msg, Action: "briefing"})
-		}
-		if looksLikeRecommend(msg) {
-			return s.recommend("recommend", msg)
 		}
 		return s.modelChat(req)
 	}

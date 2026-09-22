@@ -282,6 +282,63 @@ def fetch_klines_eastmoney(code: str, limit=260) -> list[dict]:
     return []
 
 
+def fetch_quotes_by_symbols(symbols: list[str]) -> list[dict]:
+    """按给定代码批量拉行情快照，供板块内选股限定候选池。"""
+    codes = []
+    seen = set()
+    for raw in symbols:
+        c = str(raw).strip().zfill(6)
+        if not c or c in seen:
+            continue
+        seen.add(c)
+        codes.append(c)
+    out: list[dict] = []
+    for i in range(0, len(codes), 40):
+        chunk = codes[i : i + 40]
+        secids = []
+        for c in chunk:
+            m = 1 if guess_market(c) == "SH" else 0
+            secids.append(f"{m}.{c}")
+        query = (
+            "fltt=2&invt=2&fields=f12,f14,f2,f3,f4,f5,f6,f8,f10,f100"
+            f"&secids={urllib.parse.quote(','.join(secids), safe=',.')}"
+        )
+        data = None
+        for host in EM_HOSTS:
+            try:
+                data = _json(f"{host}/api/qt/ulist.np/get?{query}", "https://quote.eastmoney.com/")
+                break
+            except Exception:
+                continue
+        rows = ((data or {}).get("data") or {}).get("diff") or []
+        if isinstance(rows, dict):
+            rows = list(rows.values())
+        for item in rows:
+            code = str(item.get("f12") or "").zfill(6)
+            name = str(item.get("f14") or "").strip()
+            if not code or not name:
+                continue
+            out.append(
+                {
+                    "symbol": code,
+                    "name": name,
+                    "market": guess_market(code),
+                    "price": _num(item.get("f2")),
+                    "changePercent": _num(item.get("f3")),
+                    "change": _num(item.get("f4")),
+                    "volume": _num(item.get("f5")),
+                    "amount": _num(item.get("f6")),
+                    "turnover": _num(item.get("f8")),
+                    "volumeRatio": _num(item.get("f10")),
+                    "industry": str(item.get("f100") or "").strip(),
+                }
+            )
+    # 保序：按入参 symbols 顺序
+    by_code = {s["symbol"]: s for s in out}
+    ordered = [by_code[c] for c in codes if c in by_code]
+    return ordered
+
+
 def fetch_klines(code: str, limit=260) -> list[dict]:
     for fn in (fetch_klines_tencent, fetch_klines_sina, fetch_klines_eastmoney):
         try:

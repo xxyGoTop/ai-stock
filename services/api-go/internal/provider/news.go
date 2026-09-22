@@ -26,13 +26,25 @@ type HotTopic struct {
 }
 
 type HotBoard struct {
-	Code                 string  `json:"code"`
-	Name                 string  `json:"name"`
-	ChangePercent        float64 `json:"changePercent"`
-	Change5              float64 `json:"change5"`
-	Leader               string  `json:"leader"`
-	LeaderCode           string  `json:"leaderCode"`
-	LeaderChangePercent  float64 `json:"leaderChangePercent"`
+	Code                string  `json:"code"`
+	Name                string  `json:"name"`
+	ChangePercent       float64 `json:"changePercent"`
+	Change5             float64 `json:"change5"`
+	Leader              string  `json:"leader"`
+	LeaderCode          string  `json:"leaderCode"`
+	LeaderChangePercent float64 `json:"leaderChangePercent"`
+}
+
+// BoardStock 板块成分股快照。
+type BoardStock struct {
+	Symbol        string  `json:"symbol"`
+	Name          string  `json:"name"`
+	Price         float64 `json:"price"`
+	ChangePercent float64 `json:"changePercent"`
+	Amount        float64 `json:"amount"`
+	Turnover      float64 `json:"turnover"`
+	VolumeRatio   float64 `json:"volumeRatio"`
+	Industry      string  `json:"industry"`
 }
 
 type HotFeed struct {
@@ -181,6 +193,225 @@ func (b *Bundle) HotBoards(limit int) ([]HotBoard, error) {
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("hot boards empty")
+	}
+	return out, nil
+}
+
+// FindBoard 按名称在概念板(t:2)+行业板(t:3)中匹配板块。
+func (b *Bundle) FindBoard(keyword string) (*HotBoard, error) {
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" {
+		return nil, fmt.Errorf("empty board keyword")
+	}
+	aliases := boardAliases(keyword)
+	boards, err := b.listBoards(2, 120)
+	if err == nil {
+		if hit := matchBoard(boards, aliases); hit != nil {
+			return hit, nil
+		}
+	}
+	ind, err2 := b.listBoards(3, 120)
+	if err2 == nil {
+		if hit := matchBoard(ind, aliases); hit != nil {
+			return hit, nil
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err2 != nil {
+		return nil, err2
+	}
+	return nil, fmt.Errorf("board not found: %s", keyword)
+}
+
+func boardAliases(keyword string) []string {
+	k := strings.TrimSpace(keyword)
+	k = strings.TrimSuffix(k, "板块")
+	k = strings.TrimSuffix(k, "概念")
+	k = strings.TrimSuffix(k, "行业")
+	out := []string{k}
+	extra := map[string][]string{
+		"半导体": {"芯片", "集成电路", "半导体"},
+		"芯片":   {"半导体", "集成电路", "芯片"},
+		"新能源": {"光伏", "锂电", "储能", "新能源车", "新能源"},
+		"光伏":   {"新能源", "光伏"},
+		"锂电":   {"新能源", "锂电池", "锂电"},
+		"创新药": {"医药", "生物制药", "创新药"},
+		"医药":   {"创新药", "生物制药", "医药"},
+		"AI":    {"人工智能", "算力", "AI应用", "AI"},
+		"人工智能": {"AI", "算力", "人工智能"},
+		"算力":   {"人工智能", "AI", "算力"},
+		"军工":   {"航天航空", "国防军工", "军工"},
+		"消费":   {"食品饮料", "白酒", "消费电子", "消费"},
+		"白酒":   {"食品饮料", "白酒"},
+		"地产":   {"房地产", "房产", "地产"},
+		"银行":   {"银行"},
+		"券商":   {"证券", "券商"},
+		"证券":   {"券商", "证券"},
+		"有色":   {"有色金属", "铜", "铝", "有色"},
+		"汽车":   {"汽车整车", "新能源汽车", "汽车"},
+	}
+	for key, vals := range extra {
+		if k == key || strings.Contains(k, key) {
+			out = append(out, vals...)
+		}
+		for _, v := range vals {
+			if k == v {
+				out = append(out, key)
+				out = append(out, vals...)
+			}
+		}
+	}
+	seen := map[string]bool{}
+	uniq := make([]string, 0, len(out))
+	for _, x := range out {
+		x = strings.TrimSpace(x)
+		if x == "" || seen[x] {
+			continue
+		}
+		seen[x] = true
+		uniq = append(uniq, x)
+	}
+	return uniq
+}
+
+func matchBoard(boards []HotBoard, aliases []string) *HotBoard {
+	// exact then contains
+	for _, a := range aliases {
+		for i := range boards {
+			if boards[i].Name == a {
+				b := boards[i]
+				return &b
+			}
+		}
+	}
+	for _, a := range aliases {
+		for i := range boards {
+			if strings.Contains(boards[i].Name, a) || strings.Contains(a, boards[i].Name) {
+				b := boards[i]
+				return &b
+			}
+		}
+	}
+	return nil
+}
+
+func (b *Bundle) listBoards(boardType, limit int) ([]HotBoard, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 80
+	}
+	fs := fmt.Sprintf("m:90+t:%d", boardType)
+	query := fmt.Sprintf("pn=1&pz=%d&po=1&np=1&fltt=2&invt=2&fid=f3&fs=%s&fields=f12,f14,f3,f109,f128,f136,f140",
+		limit, strings.ReplaceAll(fs, ":", "%3A"))
+	query = strings.ReplaceAll(query, "+", "%2B")
+	hosts := append([]string{}, emHosts...)
+	hosts = append(hosts, "https://push2his.eastmoney.com", "https://89.push2.eastmoney.com")
+	var payload map[string]interface{}
+	var last error
+	for _, host := range hosts {
+		if err := getJSON(b.Client, host+"/api/qt/clist/get?"+query, "https://quote.eastmoney.com/", &payload); err != nil {
+			last = err
+			continue
+		}
+		data, _ := payload["data"].(map[string]interface{})
+		diff, _ := data["diff"].([]interface{})
+		if len(diff) == 0 {
+			last = fmt.Errorf("boards empty")
+			continue
+		}
+		last = nil
+		break
+	}
+	if last != nil {
+		return nil, last
+	}
+	data, _ := payload["data"].(map[string]interface{})
+	diff, _ := data["diff"].([]interface{})
+	out := make([]HotBoard, 0, len(diff))
+	for _, it := range diff {
+		m, _ := it.(map[string]interface{})
+		name := asString(m["f14"])
+		if name == "" || noiseBoard.MatchString(name) {
+			continue
+		}
+		out = append(out, HotBoard{
+			Code:                asString(m["f12"]),
+			Name:                name,
+			ChangePercent:       asFloat(m["f3"]),
+			Change5:             asFloat(m["f109"]),
+			Leader:              asString(m["f128"]),
+			LeaderCode:          cleanLeader(asString(m["f140"])),
+			LeaderChangePercent: asFloat(m["f136"]),
+		})
+	}
+	return out, nil
+}
+
+// BoardStocks 拉取板块成分股（fs=b:BKxxxx），默认按涨跌幅排序。
+func (b *Bundle) BoardStocks(boardCode string, limit int) ([]BoardStock, error) {
+	code := strings.ToUpper(strings.TrimSpace(boardCode))
+	code = strings.TrimPrefix(code, "BK")
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return nil, fmt.Errorf("board code required")
+	}
+	boardCode = "BK" + code
+	if limit <= 0 || limit > 100 {
+		limit = 40
+	}
+	fs := "b:" + boardCode
+	query := fmt.Sprintf(
+		"pn=1&pz=%d&po=1&np=1&fltt=2&invt=2&fid=f3&fs=%s&fields=f12,f14,f2,f3,f6,f8,f10,f100",
+		limit, strings.ReplaceAll(strings.ReplaceAll(fs, ":", "%3A"), "+", "%2B"),
+	)
+	hosts := append([]string{}, emHosts...)
+	hosts = append(hosts, "https://push2his.eastmoney.com", "https://89.push2.eastmoney.com")
+	var payload map[string]interface{}
+	var last error
+	for _, host := range hosts {
+		if err := getJSON(b.Client, host+"/api/qt/clist/get?"+query, "https://quote.eastmoney.com/", &payload); err != nil {
+			last = err
+			continue
+		}
+		data, _ := payload["data"].(map[string]interface{})
+		diff, _ := data["diff"].([]interface{})
+		if len(diff) == 0 {
+			last = fmt.Errorf("board stocks empty")
+			continue
+		}
+		last = nil
+		break
+	}
+	if last != nil {
+		return nil, last
+	}
+	data, _ := payload["data"].(map[string]interface{})
+	diff, _ := data["diff"].([]interface{})
+	out := make([]BoardStock, 0, len(diff))
+	for _, it := range diff {
+		m, _ := it.(map[string]interface{})
+		sym := asString(m["f12"])
+		name := asString(m["f14"])
+		if sym == "" || name == "" {
+			continue
+		}
+		out = append(out, BoardStock{
+			Symbol:        PadSymbol(sym),
+			Name:          name,
+			Price:         asFloat(m["f2"]),
+			ChangePercent: asFloat(m["f3"]),
+			Amount:        asFloat(m["f6"]),
+			Turnover:      asFloat(m["f8"]),
+			VolumeRatio:   asFloat(m["f10"]),
+			Industry:      asString(m["f100"]),
+		})
+		if len(out) >= limit {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("board stocks empty")
 	}
 	return out, nil
 }

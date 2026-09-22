@@ -37,9 +37,26 @@ def run_screening(payload: dict | None = None) -> dict:
         if item.get("code"):
             weights[item["code"]] = float(item.get("weight") or 1)
 
-    pool = market.fetch_active_stocks(pages=max(2, detail // 80 + 2), fid="f6")
+    symbols = [str(x).zfill(6) for x in (payload.get("symbols") or []) if str(x).strip()]
+    industry = str(payload.get("industry") or "").strip()
+    board = str(payload.get("board") or "").strip()
+
+    if symbols:
+        pool = market.fetch_quotes_by_symbols(symbols)
+        detail = min(max(len(pool), 20), 220)
+    else:
+        pool = market.fetch_active_stocks(pages=max(2, detail // 80 + 2), fid="f6")
+        pool = [s for s in pool if "ST" not in (s.get("name") or "").upper()]
+        if industry:
+            keyed = industry
+            pool = [
+                s
+                for s in pool
+                if keyed in (s.get("industry") or "") or keyed in (s.get("name") or "")
+            ]
+        pool.sort(key=lambda s: s.get("amount") or 0, reverse=True)
+
     pool = [s for s in pool if "ST" not in (s.get("name") or "").upper()]
-    pool.sort(key=lambda s: s.get("amount") or 0, reverse=True)
     scan = pool[:detail]
 
     gainers = sorted(pool, key=lambda s: s.get("changePercent") or 0, reverse=True)[:29]
@@ -83,7 +100,7 @@ def run_screening(payload: dict | None = None) -> dict:
                 "symbol": stock["symbol"],
                 "name": stock["name"],
                 "market": stock["market"],
-                "industry": stock.get("industry") or "",
+                "industry": stock.get("industry") or board or "",
                 "price": stock.get("price"),
                 "changePercent": stock.get("changePercent"),
                 "score": round(score, 2),
@@ -107,6 +124,7 @@ def run_screening(payload: dict | None = None) -> dict:
     picks.sort(key=lambda x: x["score"], reverse=True)
     return {
         "profileCode": "screening_default",
+        "board": board or None,
         "scanned": len(klines_map),
         "qualified": len(picks),
         "strategyCount": strategy_count,

@@ -17,6 +17,9 @@ class ScreenRequest(BaseModel):
     limit: int = Field(default=30, ge=5, le=60)
     algorithms: list[str] | None = None
     weights: list[dict] | None = None
+    symbols: list[str] | None = None
+    board: str | None = None
+    industry: str | None = None
 
 
 @app.get("/health")

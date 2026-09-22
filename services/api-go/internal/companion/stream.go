@@ -87,9 +87,9 @@ func (s *Service) ChatStream(ctx context.Context, req ChatRequest, emit EmitFunc
 	case "hot":
 		res, err = s.streamHot(ctx, emit, plan)
 	case "screening":
-		res, err = s.streamScreening(ctx, emit, plan)
+		res, err = s.streamScreening(ctx, emit, plan, msg)
 	case "recommend", "preopen", "intraday", "close_auction", "review":
-		res, err = s.streamRecommend(ctx, emit, plan, action)
+		res, err = s.streamRecommend(ctx, emit, plan, action, msg)
 	case "analyze":
 		res, err = s.streamAnalyze(ctx, emit, plan, symbol, msg, req)
 	case "compare":
@@ -421,13 +421,45 @@ func (s *Service) streamHot(ctx context.Context, emit EmitFunc, plan []PlanStep)
 	return res, nil
 }
 
-func (s *Service) streamRecommend(ctx context.Context, emit EmitFunc, plan []PlanStep, action string) (*ChatResponse, error) {
+func (s *Service) streamRecommend(ctx context.Context, emit EmitFunc, plan []PlanStep, action, msg string) (*ChatResponse, error) {
+	if hint := extractBoardHint(msg); hint != "" {
+		plan = markPlan(emit, plan, "boards", "running")
+		toolStart(emit, "match_board", "匹配板块 "+hint)
+		board, err := s.resolveBoard(hint)
+		if err != nil || board == nil {
+			toolResult(emit, "match_board", "匹配板块", false, "", nil, errString(err, "未找到"))
+			res, rerr := s.recommendInBoard(action, msg, hint)
+			s.emitStaticRun(emit, plan, res, rerr)
+			return res, rerr
+		}
+		toolResult(emit, "match_board", "匹配板块", true, board.Name+" "+board.Code, board, "")
+		plan = markPlan(emit, plan, "leaders", "running")
+		toolStart(emit, "board_stocks", "拉取板块成分")
+		res, err := s.recommendInBoard(action, msg, hint)
+		if err != nil {
+			toolResult(emit, "board_stocks", "拉取板块成分", false, "", nil, err.Error())
+			return nil, err
+		}
+		toolResult(emit, "board_stocks", "拉取板块成分", true, res.Reply, nil, "")
+		plan = markPlan(emit, plan, "save", "running")
+		toolStart(emit, "save_daily_picks", "写入今日记录")
+		toolResult(emit, "save_daily_picks", "写入今日记录", true, "已覆盖同日记录", nil, "")
+		for i := range plan {
+			plan[i].Status = "done"
+		}
+		emit("research.plan", map[string]interface{}{"steps": plan})
+		for _, b := range res.Blocks {
+			emitBlock(emit, b)
+		}
+		return res, nil
+	}
+
 	plan = markPlan(emit, plan, "boards", "running")
 	toolStart(emit, "get_hot_boards", "扫描板块")
 	boards, err := s.bundle.HotBoards(40)
 	if err != nil {
 		toolResult(emit, "get_hot_boards", "扫描板块", false, "", nil, err.Error())
-		return s.recommend(action, "")
+		return s.recommend(action, msg)
 	}
 	toolResult(emit, "get_hot_boards", "扫描板块", true, fmt.Sprintf("%d 个板块", len(boards)), nil, "")
 	if aborted(ctx) {
@@ -441,7 +473,7 @@ func (s *Service) streamRecommend(ctx context.Context, emit EmitFunc, plan []Pla
 
 	plan = markPlan(emit, plan, "save", "running")
 	toolStart(emit, "save_daily_picks", "写入今日记录")
-	res, err := s.recommend(action, "")
+	res, err := s.recommend(action, msg)
 	if err != nil {
 		toolResult(emit, "save_daily_picks", "写入今日记录", false, "", nil, err.Error())
 		return nil, err
@@ -457,7 +489,50 @@ func (s *Service) streamRecommend(ctx context.Context, emit EmitFunc, plan []Pla
 	return res, nil
 }
 
-func (s *Service) streamScreening(ctx context.Context, emit EmitFunc, plan []PlanStep) (*ChatResponse, error) {
+func errString(err error, fallback string) string {
+	if err != nil {
+		return err.Error()
+	}
+	return fallback
+}
+
+func (s *Service) streamScreening(ctx context.Context, emit EmitFunc, plan []PlanStep, msg string) (*ChatResponse, error) {
+	if hint := extractBoardHint(msg); hint != "" {
+		plan = markPlan(emit, plan, "plan", "running")
+		toolStart(emit, "match_board", "匹配板块 "+hint)
+		board, err := s.resolveBoard(hint)
+		if err != nil || board == nil {
+			toolResult(emit, "match_board", "匹配板块", false, "", nil, errString(err, "未找到"))
+			res, rerr := s.screenInBoard(msg, hint)
+			s.emitStaticRun(emit, plan, res, rerr)
+			return res, rerr
+		}
+		toolResult(emit, "match_board", "匹配板块", true, board.Name, board, "")
+		plan = markPlan(emit, plan, "scan", "running")
+		toolStart(emit, "board_stocks", "扫描板块成分")
+		plan = markPlan(emit, plan, "score", "running")
+		toolStart(emit, "screen_score", "五算法评分")
+		res, err := s.screenInBoard(msg, hint)
+		if err != nil {
+			toolResult(emit, "board_stocks", "扫描板块成分", false, "", nil, err.Error())
+			toolResult(emit, "screen_score", "五算法评分", false, "", nil, err.Error())
+			return nil, err
+		}
+		toolResult(emit, "board_stocks", "扫描板块成分", true, "成分池就绪", nil, "")
+		toolResult(emit, "screen_score", "五算法评分", true, res.Reply, nil, "")
+		plan = markPlan(emit, plan, "save", "running")
+		toolStart(emit, "save_daily_picks", "写入今日记录")
+		toolResult(emit, "save_daily_picks", "写入今日记录", true, "已覆盖同日选股记录", nil, "")
+		for i := range plan {
+			plan[i].Status = "done"
+		}
+		emit("research.plan", map[string]interface{}{"steps": plan})
+		for _, b := range res.Blocks {
+			emitBlock(emit, b)
+		}
+		return res, nil
+	}
+
 	plan = markPlan(emit, plan, "plan", "running")
 	toolStart(emit, "screen_plan", "制定选股方案")
 	toolResult(emit, "screen_plan", "制定选股方案", true, "五算法 · 前 30 只", nil, "")
