@@ -160,23 +160,80 @@ function fromRemoteConversation(raw: {
   }
 }
 
-/** 启动时从服务端拉取；服务端有内容则覆盖本地，否则把本地推上去。 */
+function pickNewerConversation(a: Conversation, b: Conversation): Conversation {
+  if (a.updatedAt !== b.updatedAt) return a.updatedAt > b.updatedAt ? a : b
+  // 同时间戳时保留消息更多的一侧，避免分析回复被旧快照冲掉
+  if (a.messages.length !== b.messages.length) {
+    return a.messages.length > b.messages.length ? a : b
+  }
+  return a
+}
+
+function mergeConversationStores(
+  local: Store,
+  remoteList: Conversation[],
+  remoteActiveId?: string,
+): Store {
+  const byId = new Map<string, Conversation>()
+  for (const c of local.conversations) byId.set(c.id, c)
+  for (const c of remoteList) {
+    const prev = byId.get(c.id)
+    byId.set(c.id, prev ? pickNewerConversation(prev, c) : c)
+  }
+  const conversations = [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt)
+  if (!conversations.length) {
+    return local
+  }
+
+  const localActive = local.conversations.find((c) => c.id === local.activeId)
+  const remoteActive = remoteList.find((c) => c.id === remoteActiveId)
+  let activeId = local.activeId
+  if (localActive && remoteActive) {
+    activeId = pickNewerConversation(localActive, remoteActive).id
+  } else if (remoteActiveId && conversations.some((c) => c.id === remoteActiveId)) {
+    activeId = remoteActiveId
+  } else if (!conversations.some((c) => c.id === activeId)) {
+    activeId = conversations[0].id
+  }
+
+  return { activeId, conversations }
+}
+
+/** 立即把待同步快照推到服务端（离开对话页时调用，避免 debounce 未落盘）。 */
+export async function flushConversationSync(): Promise<void> {
+  if (syncTimer) {
+    clearTimeout(syncTimer)
+    syncTimer = null
+  }
+  await flushServerSync()
+}
+
+/**
+ * 启动 / 重新进入对话页时合并本地与服务端。
+ * 按 updatedAt（及消息数）择优，禁止用较旧的服务端快照覆盖本地已有分析回复。
+ */
 export async function hydrateFromServer(): Promise<Store> {
   const local = loadStore()
   try {
     const remote = await getConversationSnapshot()
     const remoteList = (remote.conversations || []).map(fromRemoteConversation)
     if (remoteList.length > 0) {
-      const activeId =
-        remote.activeId && remoteList.some((c) => c.id === remote.activeId)
-          ? remote.activeId
-          : remoteList[0].id
-      const store: Store = { activeId, conversations: remoteList }
+      const store = mergeConversationStores(local, remoteList, remote.activeId)
       mem.value = store
       try {
         sessionStorage.setItem(KEY, JSON.stringify(store))
       } catch {
         /* ignore */
+      }
+      // 本地更新时把合并结果推回，避免下次再被旧快照覆盖
+      const localWins = local.conversations.some((lc) => {
+        const rc = remoteList.find((r) => r.id === lc.id)
+        if (!rc) return lc.messages.length > 0
+        const winner = pickNewerConversation(lc, rc)
+        return winner === lc && (lc.updatedAt > rc.updatedAt || lc.messages.length > rc.messages.length)
+      })
+      if (localWins) {
+        scheduleServerSync(store)
       }
       return store
     }

@@ -102,6 +102,56 @@ func (c *Client) Analyze(payload json.RawMessage) (json.RawMessage, error) {
 	return dest, err
 }
 
+// AnalyzeStream 消费 Python NDJSON 进度流；onProgress 收到 progress 事件，最终返回 result。
+func (c *Client) AnalyzeStream(payload json.RawMessage, onProgress func(step, title, status, summary string)) (json.RawMessage, error) {
+	if len(payload) == 0 {
+		payload = json.RawMessage(`{}`)
+	}
+	res, err := c.client.Post(c.base+"/v1/ai/analyze/stream", "application/json", bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 400 {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("python %s: %s", res.Status, string(body))
+	}
+	dec := json.NewDecoder(res.Body)
+	var result json.RawMessage
+	for {
+		var ev map[string]interface{}
+		if err := dec.Decode(&ev); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+		switch fmt.Sprint(ev["event"]) {
+		case "progress":
+			if onProgress != nil {
+				onProgress(
+					fmt.Sprint(ev["step"]),
+					fmt.Sprint(ev["title"]),
+					fmt.Sprint(ev["status"]),
+					fmt.Sprint(ev["summary"]),
+				)
+			}
+		case "result":
+			raw, err := json.Marshal(ev["data"])
+			if err != nil {
+				return nil, err
+			}
+			result = raw
+		case "error":
+			return nil, fmt.Errorf("%v", ev["message"])
+		}
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("analyze stream empty")
+	}
+	return result, nil
+}
+
 func (c *Client) Chat(payload json.RawMessage) (json.RawMessage, error) {
 	var dest json.RawMessage
 	err := c.post("/v1/ai/chat", payload, &dest)

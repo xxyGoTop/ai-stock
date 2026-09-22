@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { analyzeStock, listAnalysisProfiles } from '@ai-stock/api-client'
+import { analyzeStockStream, listAnalysisProfiles } from '@ai-stock/api-client'
 import type { AnalysisProfile, StockAnalysis } from '@ai-stock/types'
 import { loadAnalysis, PROFILE_KEY, saveAnalysis } from '../lib/cache'
 
@@ -14,18 +14,17 @@ const ALGO: Record<string, string> = {
 }
 const MODEL: Record<string, string> = {
   'quant-rules': '量化规则',
-  'agents-a1-free': 'Agents A1',
-  'intern-s2-free': 'Intern S2',
   'deepseek-chat': 'DeepSeek',
   'qwen-plus': '通义千问',
+  'doubao-seed-2-1-lite': '豆包 Seed 2.1 Lite',
   'doubao-seed-2-1-pro': '豆包 Seed 2.1 Pro',
   'deepseek-v4-flash': 'DeepSeek V4 Flash',
 }
 const PROFILE: Record<string, string> = {
-  stock_analysis_fast: '快速',
-  stock_analysis_default: 'AIHubMix 回退',
-  stock_analysis_ark: '火山方舟',
-  stock_analysis_ensemble: '多模型综合',
+  stock_analysis_fast: '快速（规则）',
+  stock_analysis_default: '火山方舟（默认）',
+  stock_analysis_ark: '火山方舟 Pro 优先',
+  stock_analysis_ensemble: '方舟多模型综合',
 }
 const AGENT: Record<string, string> = {
   stock_analyst: '个股分析员',
@@ -35,16 +34,20 @@ const AGENT: Record<string, string> = {
   ensemble_judge: '综合裁判',
 }
 
+type ProgressLine = { step: string; title: string; status: string; summary?: string }
+
 export default function AnalysisPanel({ symbol }: { symbol: string }) {
   const [profiles, setProfiles] = useState<AnalysisProfile[]>([])
   const [profile, setProfile] = useState(localStorage.getItem(PROFILE_KEY) || 'stock_analysis_default')
   const [data, setData] = useState<StockAnalysis | null>(() => loadAnalysis(symbol))
   const [loading, setLoading] = useState(false)
+  const [progress, setProgress] = useState<ProgressLine[]>([])
   const [error, setError] = useState('')
 
   useEffect(() => {
     setData(loadAnalysis(symbol))
     setError('')
+    setProgress([])
   }, [symbol])
 
   useEffect(() => {
@@ -56,8 +59,20 @@ export default function AnalysisPanel({ symbol }: { symbol: string }) {
   async function run() {
     setLoading(true)
     setError('')
+    setProgress([])
     try {
-      const next = await analyzeStock(symbol, profile)
+      const next = await analyzeStockStream(symbol, {
+        profileCode: profile,
+        onProgress: (p) => {
+          setProgress((prev) => {
+            const i = prev.findIndex((x) => x.step === p.step)
+            if (i < 0) return [...prev, p]
+            const copy = [...prev]
+            copy[i] = p
+            return copy
+          })
+        },
+      })
       setData(next)
       saveAnalysis(symbol, next)
     } catch (err) {
@@ -90,6 +105,23 @@ export default function AnalysisPanel({ symbol }: { symbol: string }) {
         </div>
       </div>
       {error && <p className="warn">{error}</p>}
+      {loading && (
+        <div className="analyze-progress">
+          <p className="muted">正在分析，步骤会实时更新…</p>
+          <ul>
+            {progress.map((p) => (
+              <li key={p.step} className={p.status === 'done' ? 'done' : 'running'}>
+                <span className="ap-mark">{p.status === 'done' ? '✓' : '…'}</span>
+                <span>
+                  {p.title || p.step}
+                  {p.summary ? <span className="muted"> · {p.summary}</span> : null}
+                </span>
+              </li>
+            ))}
+            {progress.length === 0 ? <li className="running">准备中…</li> : null}
+          </ul>
+        </div>
+      )}
       {data && (
         <div className="analysis">
           <div className={`verdict ${data.final.direction}`}>
@@ -99,6 +131,17 @@ export default function AnalysisPanel({ symbol }: { symbol: string }) {
             <span>{data.final.action}</span>
           </div>
           <p className="muted">{data.final.summary}</p>
+          {(data.attribution?.primaryLabel || data.attribution?.explanation) && (
+            <div className="attr-box">
+              <strong>涨跌归因 · {data.attribution.primaryLabel || '综合'}</strong>
+              {data.attribution.explanation ? <p>{data.attribution.explanation}</p> : null}
+              {(data.attribution.drivers || []).slice(0, 3).map((x, i) => (
+                <p key={i} className="muted">
+                  [{x.label || '因素'}] {x.detail}
+                </p>
+              ))}
+            </div>
+          )}
           <div className="muted tiny">
             {data.profileName || PROFILE[data.profileCode] || data.profileCode}
             {data.agentCode ? ` · ${AGENT[data.agentCode] || data.agentCode}` : ''}

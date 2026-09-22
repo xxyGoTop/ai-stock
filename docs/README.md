@@ -13,5 +13,6 @@
 - 页内自选异动 / 今日操作主动提醒（服务端 Notification Agent 定时扫描 + 收件箱去重）
 - 会话与 research_events 服务端持久化（`data/conversations.json`；浏览器仍缓存 sessionStorage）
 - 对话块：`comparison` 双标的对比表、`risk` 风险卡；Workspace 支持 VS 视图
+- **Memory**：关注偏好 + 研究历史 + 会话摘要；自由对话注入 LLM；设置页可配置
 
 换机续作与今晚改动清单见根 README「今晚改动摘要」一节。

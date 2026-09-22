@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getAnomalyRules, listAgents, listAnalysisProfiles, listDailyPicks, listLlmModels, resetAnomalyRules, saveAnomalyRules } from '@ai-stock/api-client'
-import type { AgentPrompt, AnalysisProfile, AnomalyRules, DailyPickRecord, LlmModel } from '@ai-stock/types'
+import { getAnomalyRules, getMemory, listAgents, listAnalysisProfiles, listDailyPicks, listLlmModels, resetAnomalyRules, saveAnomalyRules, saveMemoryPreferences } from '@ai-stock/api-client'
+import type { AgentPrompt, AnalysisProfile, AnomalyRules, DailyPickRecord, LlmModel, MemoryPreferences } from '@ai-stock/types'
 import PaginatedPicks from '../components/PaginatedPicks'
 import { PROFILE_KEY } from '../lib/cache'
 
@@ -25,15 +25,20 @@ export default function Settings() {
   const [rules, setRules] = useState<AnomalyRules | null>(null)
   const [ruleMsg, setRuleMsg] = useState('')
   const [ruleBusy, setRuleBusy] = useState(false)
+  const [prefs, setPrefs] = useState<MemoryPreferences>({ focusThemes: [], note: '' })
+  const [themeInput, setThemeInput] = useState('')
+  const [memMsg, setMemMsg] = useState('')
+  const [memBusy, setMemBusy] = useState(false)
 
   useEffect(() => {
-    Promise.all([listAnalysisProfiles(), listLlmModels(), listAgents(), listDailyPicks(), getAnomalyRules()])
-      .then(([p, m, a, picks, cfg]) => {
+    Promise.all([listAnalysisProfiles(), listLlmModels(), listAgents(), listDailyPicks(), getAnomalyRules(), getMemory()])
+      .then(([p, m, a, picks, cfg, mem]) => {
         setProfiles(p)
         setModels(m)
         setAgents(a)
         setRecords(picks)
         setRules(cfg.rules)
+        setPrefs(mem.preferences || { focusThemes: [], note: '' })
         if (picks.length) {
           const prefer =
             picks.find((r) => r.kind === 'recommend') ||
@@ -197,6 +202,86 @@ export default function Settings() {
         ) : (
           <p className="muted">正在加载异动阈值…</p>
         )}
+      </section>
+
+      <section className="panel" style={{ marginTop: 16 }}>
+        <h2 className="section-title">投研记忆</h2>
+        <p className="muted">
+          只保存你明确设置的关注方向；分析 / 板块选股会自动记入「近期研究」。自由对话时会把记忆注入模型上下文（不永久画像推断）。数据：
+          <code>services/api-go/data/memory.json</code>。
+        </p>
+        <div className="algo-pills" style={{ marginTop: 8 }}>
+          {(prefs.focusThemes || []).map((t) => (
+            <button
+              key={t}
+              type="button"
+              className="pill on"
+              title="点击移除"
+              onClick={() => setPrefs({ ...prefs, focusThemes: prefs.focusThemes.filter((x) => x !== t) })}
+            >
+              {t} ×
+            </button>
+          ))}
+        </div>
+        <div className="action-row" style={{ marginTop: 10, gap: 8, flexWrap: 'wrap' }}>
+          <input
+            value={themeInput}
+            onChange={(e) => setThemeInput(e.target.value)}
+            placeholder="添加题材，如 AI / 新能源"
+            style={{ minWidth: 180, flex: 1 }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return
+              e.preventDefault()
+              const t = themeInput.trim()
+              if (!t || prefs.focusThemes.includes(t)) return
+              setPrefs({ ...prefs, focusThemes: [...prefs.focusThemes, t].slice(0, 12) })
+              setThemeInput('')
+            }}
+          />
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => {
+              const t = themeInput.trim()
+              if (!t || prefs.focusThemes.includes(t)) return
+              setPrefs({ ...prefs, focusThemes: [...prefs.focusThemes, t].slice(0, 12) })
+              setThemeInput('')
+            }}
+          >
+            添加
+          </button>
+        </div>
+        <label className="muted" style={{ display: 'block', marginTop: 12 }}>
+          备注（可选）
+          <textarea
+            rows={2}
+            value={prefs.note || ''}
+            onChange={(e) => setPrefs({ ...prefs, note: e.target.value })}
+            placeholder="例如：偏短线，少追高"
+            style={{ display: 'block', width: '100%', marginTop: 6 }}
+          />
+        </label>
+        <div className="action-row" style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            className="ghost-btn"
+            disabled={memBusy}
+            onClick={() => {
+              setMemBusy(true)
+              setMemMsg('')
+              saveMemoryPreferences({ focusThemes: prefs.focusThemes, note: prefs.note || '' })
+                .then((snap) => {
+                  setPrefs(snap.preferences)
+                  setMemMsg('已保存关注偏好。')
+                })
+                .catch((err) => setMemMsg(err instanceof Error ? err.message : '保存失败'))
+                .finally(() => setMemBusy(false))
+            }}
+          >
+            {memBusy ? '保存中…' : '保存偏好'}
+          </button>
+        </div>
+        {memMsg ? <p className="muted">{memMsg}</p> : null}
       </section>
 
       <section className="panel" style={{ marginTop: 16 }}>

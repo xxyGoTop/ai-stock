@@ -5,10 +5,15 @@ from prompts.loader import get_agent
 from .config import get_model, model_callable
 from .providers import complete_text
 
-CHAT_ORDER = ["doubao-seed-2-1-pro", "deepseek-v4-flash", "quant-rules"]
+CHAT_ORDER = ["doubao-seed-2-1-lite", "doubao-seed-2-1-pro", "deepseek-v4-flash", "quant-rules"]
 
 
-def chat_reply(message: str, history: list[dict] | None = None, model_code: str | None = None) -> dict:
+def chat_reply(
+    message: str,
+    history: list[dict] | None = None,
+    model_code: str | None = None,
+    memory_context: str | None = None,
+) -> dict:
     question = (message or "").strip()
     if not question:
         return {"reply": "说一下你想看的行情、指标，或股票代码。", "modelCode": "quant-rules"}
@@ -21,7 +26,16 @@ def chat_reply(message: str, history: list[dict] | None = None, model_code: str 
         }
 
     agent = get_agent("companion_chat")
-    messages = [{"role": "system", "content": agent.system}]
+    system = agent.system
+    mem = (memory_context or "").strip()
+    if mem:
+        system = (
+            system
+            + "\n\n## Relevant Memory\n"
+            + mem
+            + "\n（仅作背景参考；不要编造记忆中没有的事实。用户未明确设置的偏好不要永久推断。）"
+        )
+    messages = [{"role": "system", "content": system}]
     for turn in history or []:
         role = turn.get("role")
         content = str(turn.get("content") or "").strip()

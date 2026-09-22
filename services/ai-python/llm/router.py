@@ -135,7 +135,14 @@ def _pack(profile: dict, entries: list[dict], votes: list[dict]) -> dict:
         "mode": profile.get("mode"),
         "usedModels": [v.get("modelCode") for v in votes],
         "votes": [{"modelCode": v.get("modelCode"), "direction": v.get("direction"), "score": v.get("score"), "risk": v.get("risk")} for v in votes],
-        "final": {"direction": direction, "score": final_score, "risk": risk, "action": primary.get("action"), "summary": primary.get("summary")},
+        "final": {
+            "direction": direction,
+            "score": final_score,
+            "risk": risk,
+            "action": primary.get("action"),
+            "summary": primary.get("summary"),
+        },
         "cards": primary.get("cards") or [],
         "summaries": [{"modelCode": v.get("modelCode"), "summary": v.get("summary")} for v in votes],
+        "attribution": primary.get("attribution"),
     }

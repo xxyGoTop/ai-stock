@@ -54,6 +54,8 @@ func (s *Service) ChatStream(ctx context.Context, req ChatRequest, emit EmitFunc
 			action = "recommend"
 		} else if looksLikeCompare(msg) {
 			action = "compare"
+		} else if looksLikeMemory(msg) {
+			action = "memory"
 		} else if strings.Contains(msg, "异动") || strings.Contains(msg, "盯盘") {
 			action = "watch_anomaly"
 		} else {
@@ -127,8 +129,16 @@ func (s *Service) ChatStream(ctx context.Context, req ChatRequest, emit EmitFunc
 		s.emitStaticRun(emit, plan, res, err)
 	case "watch_anomaly", "anomaly":
 		res, err = s.streamAnomalies(ctx, emit, plan)
+	case "memory", "preference":
+		res, err = s.showMemory()
+		s.emitStaticRun(emit, plan, res, err)
 	default:
-		res, err = s.streamChat(ctx, emit, plan, req)
+		if looksLikeMemory(msg) {
+			res, err = s.showMemory()
+			s.emitStaticRun(emit, plan, res, err)
+		} else {
+			res, err = s.streamChat(ctx, emit, plan, req)
+		}
 	}
 
 	if err != nil {
@@ -141,6 +151,8 @@ func (s *Service) ChatStream(ctx context.Context, req ChatRequest, emit EmitFunc
 		emit("message.end", map[string]interface{}{"ok": false, "runId": runID})
 		return fmt.Errorf("empty response")
 	}
+
+	s.afterChatMemory(req, res)
 
 	// 文本增量（按句粗切，形成流式感）
 	emitDelta(emit, res.Reply)
@@ -189,7 +201,11 @@ func planForAction(action string) []PlanStep {
 			{ID: "quote", Title: "获取实时行情", Status: "pending"},
 			{ID: "note", Title: "生成每日笔记", Status: "pending"},
 			{ID: "news", Title: "个股新闻与公告", Status: "pending"},
-			{ID: "ai", Title: "AI 解读整理", Status: "pending"},
+			{ID: "sector", Title: "板块与涨跌归因上下文", Status: "pending"},
+			{ID: "klines", Title: "拉取 K 线与行情包", Status: "pending"},
+			{ID: "rps", Title: "计算相对强弱", Status: "pending"},
+			{ID: "algo", Title: "运行五套算法", Status: "pending"},
+			{ID: "llm", Title: "大模型解读", Status: "pending"},
 			{ID: "actions", Title: "准备后续动作", Status: "pending"},
 		}
 	case "compare":
@@ -204,6 +220,12 @@ func planForAction(action string) []PlanStep {
 			{ID: "load", Title: "读取自选列表", Status: "pending"},
 			{ID: "scan", Title: "扫描涨跌、资金与拉升", Status: "pending"},
 			{ID: "judge", Title: "生成异动结论", Status: "pending"},
+		}
+	case "memory", "preference":
+		return []PlanStep{
+			{ID: "prefs", Title: "读取关注偏好", Status: "pending"},
+			{ID: "research", Title: "整理研究历史", Status: "pending"},
+			{ID: "render", Title: "生成记忆摘要", Status: "pending"},
 		}
 	default:
 		return []PlanStep{
@@ -656,7 +678,8 @@ func (s *Service) streamAnalyze(ctx context.Context, emit EmitFunc, plan []PlanS
 
 	plan = markPlan(emit, plan, "news", "running")
 	toolStart(emit, "stock_news", "个股新闻与公告")
-	if feed, err := s.bundle.StockNews(symbol, 5); err == nil && feed != nil {
+	extras, sectorBlocks, feed := s.collectAnalyzeExtras(symbol, quote)
+	if feed != nil {
 		if len(feed.News) > 0 {
 			b := Block{Type: "news", Title: "相关新闻", Items: feed.News, Symbol: symbol}
 			blocks = append(blocks, b)
@@ -669,24 +692,63 @@ func (s *Service) streamAnalyze(ctx context.Context, emit EmitFunc, plan []PlanS
 		}
 		toolResult(emit, "stock_news", "个股新闻与公告", true, fmt.Sprintf("新闻 %d · 公告 %d", len(feed.News), len(feed.Notices)), nil, "")
 	} else {
-		errMsg := "暂无"
-		if err != nil {
-			errMsg = err.Error()
-		}
-		toolResult(emit, "stock_news", "个股新闻与公告", false, "", nil, errMsg)
+		toolResult(emit, "stock_news", "个股新闻与公告", false, "", nil, "暂无")
 	}
 	if aborted(ctx) {
 		return nil, ctx.Err()
 	}
 
-	plan = markPlan(emit, plan, "ai", "running")
+	plan = markPlan(emit, plan, "sector", "running")
+	toolStart(emit, "sector_context", "板块与涨跌归因上下文")
+	for _, b := range sectorBlocks {
+		blocks = append(blocks, b)
+		emitBlock(emit, b)
+	}
+	toolResult(emit, "sector_context", "板块与涨跌归因上下文", true,
+		fmt.Sprintf("行业 %s · 新闻标题 %d", quote.Industry, len(asStringSlice(extras["newsTitles"]))+len(asStringSlice(extras["noticeTitles"]))),
+		nil, "")
+	if aborted(ctx) {
+		return nil, ctx.Err()
+	}
+
 	toolStart(emit, "ai_analyze", "AI 解读")
-	if raw, err := s.py.Analyze(analyzePayload(symbol, req)); err == nil && len(raw) > 0 {
+	raw, err := s.py.AnalyzeStream(analyzePayload(symbol, req, extras), func(step, title, status, summary string) {
+		if aborted(ctx) {
+			return
+		}
+		id := step
+		if id == "" {
+			id = "llm"
+		}
+		// 对齐研究计划步骤
+		switch id {
+		case "klines", "rps", "algo", "sector", "llm":
+			if status == "running" {
+				plan = markPlan(emit, plan, id, "running")
+			} else if status == "done" {
+				plan = markPlan(emit, plan, id, "done")
+			}
+		}
+		label := title
+		if label == "" {
+			label = id
+		}
+		if status == "running" {
+			toolStart(emit, "ai_"+id, label)
+		} else if status == "done" {
+			toolResult(emit, "ai_"+id, label, true, summary, nil, "")
+		}
+	})
+	if err == nil && len(raw) > 0 {
 		var analysis interface{}
 		if json.Unmarshal(raw, &analysis) == nil {
 			b := Block{Type: "analysis", Title: "AI 解读", Data: analysis, Symbol: symbol}
 			blocks = append(blocks, b)
 			emitBlock(emit, b)
+			if ab := attributionBlockFromAnalysis(symbol, analysis); ab != nil {
+				blocks = append(blocks, *ab)
+				emitBlock(emit, *ab)
+			}
 			if rb := buildRiskBlock(symbol, analysis); rb != nil {
 				blocks = append(blocks, *rb)
 				emitBlock(emit, *rb)
@@ -717,7 +779,7 @@ func (s *Service) streamAnalyze(ctx context.Context, emit EmitFunc, plan []PlanS
 	}
 	emit("research.plan", map[string]interface{}{"steps": plan})
 
-	reply := fmt.Sprintf("已整理 %s 的快照、新闻与分析。右侧可看 K 线和公告，也可一键自选/模拟。", quote.Name)
+	reply := fmt.Sprintf("已整理 %s 的快照、板块归因、新闻与分析。右侧可看 K 线和公告，也可一键自选/模拟。", quote.Name)
 	return &ChatResponse{
 		Reply: reply, Intent: "analyze", Blocks: blocks,
 		Workspace: &WorkspaceHint{Type: "stock", Symbol: quote.Symbol, Name: quote.Name, Tab: "analysis"},

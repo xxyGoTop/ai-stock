@@ -95,6 +95,7 @@ def _parse_json(text: str) -> dict:
         "score": max(0, min(100, score)),
         "risk": data.get("risk") if data.get("risk") in ("low", "mid", "high") else "mid",
         "action": str(data.get("action") or "观望")[:40],
-        "summary": str(data.get("summary") or "").strip()[:200],
+        "summary": str(data.get("summary") or "").strip()[:240],
         "cards": data.get("cards") if isinstance(data.get("cards"), list) else [],
+        "attribution": data.get("attribution") if isinstance(data.get("attribution"), dict) else None,
     }

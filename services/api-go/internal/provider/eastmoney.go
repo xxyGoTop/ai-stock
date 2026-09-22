@@ -76,14 +76,18 @@ func searchEastmoney(client *http.Client, q string) ([]Stock, error) {
 func (b *Bundle) Quote(symbol string) (*Quote, error) {
 	symbol = PadSymbol(symbol)
 	q, err := fetchEMQuote(b.Client, symbol)
-	if err == nil && q != nil && q.Price > 0 {
-		return q, nil
+	if err != nil || q == nil || q.Price <= 0 {
+		q, err = fetchTencentQuote(b.Client, symbol)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return fetchTencentQuote(b.Client, symbol)
+	enrichQuoteMeta(b.Client, q)
+	return q, nil
 }
 
 func fetchEMQuote(client *http.Client, symbol string) (*Quote, error) {
-	fields := "f12,f13,f14,f2,f3,f4,f5,f6,f7,f8,f10,f15,f16,f17,f18,f20,f62,f66,f72,f100,f184"
+	fields := "f12,f13,f14,f2,f3,f4,f5,f6,f7,f8,f10,f15,f16,f17,f18,f20,f62,f66,f72,f100,f102,f103,f184"
 	query := "fltt=2&invt=2&fields=" + url.QueryEscape(fields) + "&secids=" + url.QueryEscape(SecID(symbol, GuessMarket(symbol)))
 	var lastErr error
 	for _, host := range emHosts {
@@ -126,26 +130,151 @@ func quoteFromEM(m map[string]interface{}) *Quote {
 	if change == 0 && prev > 0 {
 		change = price - prev
 	}
+	concepts := splitConcepts(asString(m["f103"]))
 	return &Quote{
-		Stock:         Stock{Symbol: code, Name: name, Market: market},
-		Price:         price,
-		Change:        change,
-		ChangePercent: asFloat(m["f3"]),
-		Open:          asFloat(m["f17"]),
-		High:          asFloat(m["f15"]),
-		Low:           asFloat(m["f16"]),
-		PrevClose:     prev,
-		Volume:        asFloat(m["f5"]),
-		Amount:        asFloat(m["f6"]),
-		Turnover:      asFloat(m["f8"]),
-		VolumeRatio:   asFloat(m["f10"]),
+		Stock:            Stock{Symbol: code, Name: name, Market: market},
+		Price:            price,
+		Change:           change,
+		ChangePercent:    asFloat(m["f3"]),
+		Open:             asFloat(m["f17"]),
+		High:             asFloat(m["f15"]),
+		Low:              asFloat(m["f16"]),
+		PrevClose:        prev,
+		Volume:           asFloat(m["f5"]),
+		Amount:           asFloat(m["f6"]),
+		Turnover:         asFloat(m["f8"]),
+		VolumeRatio:      asFloat(m["f10"]),
 		Amplitude:        asFloat(m["f7"]),
 		Industry:         asString(m["f100"]),
+		Region:           asString(m["f102"]),
+		Concepts:         concepts,
 		MainNetInflow:    asFloat(m["f62"]),
 		MainNetInflowPct: asFloat(m["f184"]),
 		SuperNetInflow:   asFloat(m["f66"]),
 		BigNetInflow:     asFloat(m["f72"]),
 	}
+}
+
+// enrichQuoteMeta 用 stock/get 补行业（f127 优先）与概念；ulist 的 f100 经常为空。
+// stock/get 若被断开，再走 F10 CoreConception（ssbk 板块列表）。
+func enrichQuoteMeta(client *http.Client, q *Quote) {
+	if q == nil || q.Symbol == "" {
+		return
+	}
+	needIndustry := strings.TrimSpace(q.Industry) == ""
+	needConcepts := len(q.Concepts) == 0
+	if !needIndustry && !needConcepts {
+		return
+	}
+	secid := SecID(q.Symbol, q.Market)
+	fields := "f57,f58,f100,f102,f103,f127"
+	path := "/api/qt/stock/get?secid=" + url.QueryEscape(secid) + "&fields=" + url.QueryEscape(fields)
+	for _, host := range emHosts {
+		var payload map[string]interface{}
+		if err := getJSON(client, host+path, "https://quote.eastmoney.com/", &payload); err != nil {
+			continue
+		}
+		data, _ := payload["data"].(map[string]interface{})
+		if data == nil {
+			continue
+		}
+		if needIndustry {
+			ind := asString(data["f127"])
+			if ind == "" {
+				ind = asString(data["f100"])
+			}
+			if ind != "" {
+				q.Industry = ind
+				needIndustry = false
+			}
+		}
+		if q.Region == "" {
+			q.Region = asString(data["f102"])
+		}
+		if needConcepts {
+			concepts := splitConcepts(asString(data["f103"]))
+			if len(concepts) > 0 {
+				q.Concepts = concepts
+				needConcepts = false
+			}
+		}
+		if !needIndustry && !needConcepts {
+			return
+		}
+	}
+	if needIndustry || needConcepts {
+		enrichFromF10Boards(client, q)
+	}
+}
+
+// enrichFromF10Boards 走东财 F10「核心题材」接口，ssbk 第一项通常为行业，其余为概念板块。
+func enrichFromF10Boards(client *http.Client, q *Quote) {
+	prefix := "SZ"
+	if q.Market == MarketSH || GuessMarket(q.Symbol) == MarketSH {
+		prefix = "SH"
+	}
+	u := "https://emweb.securities.eastmoney.com/PC_HSF10/CoreConception/PageAjax?code=" + prefix + q.Symbol
+	var payload map[string]interface{}
+	if err := getJSON(client, u, "https://emweb.securities.eastmoney.com/", &payload); err != nil {
+		return
+	}
+	raw, _ := payload["ssbk"].([]interface{})
+	if len(raw) == 0 {
+		return
+	}
+	names := make([]string, 0, len(raw))
+	seen := map[string]bool{}
+	for _, row := range raw {
+		m, _ := row.(map[string]interface{})
+		name := asString(m["BOARD_NAME"])
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return
+	}
+	if strings.TrimSpace(q.Industry) == "" {
+		q.Industry = names[0]
+	}
+	if len(q.Concepts) == 0 {
+		start := 0
+		if q.Industry == names[0] {
+			start = 1
+		}
+		if start < len(names) {
+			q.Concepts = names[start:]
+			if len(q.Concepts) > 8 {
+				q.Concepts = q.Concepts[:8]
+			}
+		}
+	}
+}
+
+func splitConcepts(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == '，' || r == '/' || r == '|'
+	})
+	out := make([]string, 0, len(parts))
+	seen := map[string]bool{}
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" || seen[p] {
+			continue
+		}
+		seen[p] = true
+		out = append(out, p)
+		if len(out) >= 8 {
+			break
+		}
+	}
+	return out
 }
 
 func (b *Bundle) IndexQuotes() ([]Quote, error) {

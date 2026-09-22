@@ -34,9 +34,12 @@ def analyze_quant(context: dict) -> dict:
 
     risk = "high" if (bias5 is not None and bias5 > 8) or change <= -7 else "mid" if score < 55 else "low"
     names = "、".join(h.get("short") or h.get("name") or h.get("algorithmCode") for h in hits) or "未命中五套算法"
+    attr = context.get("attribution") or (context.get("sector") or {}).get("attribution") or {}
+    attr_bit = f"涨跌主因偏{attr.get('primaryLabel')}。" if attr.get("primaryLabel") else ""
     summary = (
         f"{stock.get('name') or stock.get('symbol')} 现价 {stock.get('price')}，"
-        f"涨跌 {change:.2f}%。量化命中：{names}。"
+        f"涨跌 {change:.2f}%。{attr_bit}"
+        f"量化命中：{names}。"
         f"五日线{'向上且多头' if ind.get('bullAlign') and ind.get('ma5Rising') else '尚未完整共振'}，"
         f"建议{action}。"
     )
@@ -69,6 +72,29 @@ def analyze_quant(context: dict) -> dict:
             ],
         },
     ]
+    sector = context.get("sector") or {}
+    ib = sector.get("industryBoard") or {}
+    sector_items = []
+    if ib:
+        sector_items.append(
+            {"name": "行业板块", "value": f"{ib.get('name')} {float(ib.get('changePercent') or 0):+.2f}%"}
+        )
+    if stock.get("industry"):
+        sector_items.append({"name": "行业", "value": str(stock.get("industry"))})
+    if attr.get("primaryLabel"):
+        sector_items.append({"name": "涨跌主因", "value": attr["primaryLabel"]})
+    for d in (attr.get("drivers") or [])[:2]:
+        sector_items.append({"name": d.get("label") or "因素", "value": (d.get("detail") or "")[:80]})
+    if sector_items:
+        cards.insert(
+            0,
+            {
+                "cardType": "sector",
+                "title": "板块与涨跌归因",
+                "score": score,
+                "items": sector_items,
+            },
+        )
     return {
         "modelCode": "quant-rules",
         "direction": direction,
@@ -77,4 +103,5 @@ def analyze_quant(context: dict) -> dict:
         "action": action,
         "summary": summary,
         "cards": cards,
+        "attribution": attr or None,
     }

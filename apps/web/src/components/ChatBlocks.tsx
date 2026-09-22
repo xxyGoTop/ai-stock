@@ -347,6 +347,39 @@ function BlockView({
         </div>
       )
     }
+    case 'attribution': {
+      const attr = (block.data || {}) as {
+        primaryLabel?: string
+        explanation?: string
+        drivers?: { label?: string; detail?: string }[]
+        stockChangePercent?: number
+        industryChangePercent?: number
+      }
+      return (
+        <div className="cblock attr-block">
+          <h4>{block.title || '涨跌归因'}</h4>
+          <p>
+            <strong>{attr.primaryLabel || block.text || '综合判断'}</strong>
+            {typeof attr.stockChangePercent === 'number' ? (
+              <span className="muted"> · 个股 {attr.stockChangePercent >= 0 ? '+' : ''}{attr.stockChangePercent}%</span>
+            ) : null}
+            {typeof attr.industryChangePercent === 'number' ? (
+              <span className="muted"> · 行业 {attr.industryChangePercent >= 0 ? '+' : ''}{attr.industryChangePercent}%</span>
+            ) : null}
+          </p>
+          {(attr.explanation || block.text) && <p>{attr.explanation || block.text}</p>}
+          {(attr.drivers || []).length > 0 && (
+            <ul className="risk-points">
+              {(attr.drivers || []).slice(0, 4).map((d, i) => (
+                <li key={i}>
+                  <strong>{d.label || '因素'}</strong>：{d.detail}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )
+    }
     case 'risk': {
       const meta = (block.meta || {}) as { level?: string; action?: string; score?: number }
       const level = String(meta.level || 'medium')
@@ -511,6 +544,13 @@ function AnalysisDigest({ data }: { data: unknown }) {
   if (!data || typeof data !== 'object') return <p className="muted">暂无结构化结论</p>
   const d = data as Record<string, unknown>
   const final = d.final as { direction?: string; score?: number; risk?: string; action?: string; summary?: string } | undefined
+  const attr =
+    (d.attribution as { primaryLabel?: string; explanation?: string; drivers?: { label?: string; detail?: string }[] } | undefined) ||
+    ((d.sector as { attribution?: { primaryLabel?: string; explanation?: string; drivers?: { label?: string; detail?: string }[] } } | undefined)
+      ?.attribution)
+  const sectorCards = ((d.cards as { cardType?: string; title?: string; items?: { name: string; value: string }[] }[]) || []).filter(
+    (c) => c.cardType === 'sector' || c.cardType === 'attribution',
+  )
   if (final?.summary) {
     return (
       <div>
@@ -521,6 +561,32 @@ function AnalysisDigest({ data }: { data: unknown }) {
         </p>
         <p>{final.summary}</p>
         {final.action && <p className="muted">建议动作：{final.action}</p>}
+        {attr?.primaryLabel || attr?.explanation ? (
+          <div className="attr-box">
+            <strong>涨跌归因 · {attr.primaryLabel || '综合'}</strong>
+            {attr.explanation ? <p>{attr.explanation}</p> : null}
+            {(attr.drivers || []).slice(0, 3).map((x, i) => (
+              <p key={i} className="muted">
+                [{x.label || '因素'}] {x.detail}
+              </p>
+            ))}
+          </div>
+        ) : null}
+        {sectorCards.length > 0 ? (
+          <div className="attr-cards">
+            {sectorCards.map((c) => (
+              <div key={(c.cardType || '') + (c.title || '')} className="attr-card">
+                <strong>{c.title || c.cardType}</strong>
+                {(c.items || []).slice(0, 4).map((it) => (
+                  <div className="kv" key={it.name}>
+                    <span className="muted">{it.name}</span>
+                    <span>{it.value}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
     )
   }

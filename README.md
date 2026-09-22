@@ -14,11 +14,12 @@ Web 是 React，业务 API 是 Go，量化计算与 LLM Agent 在 Python。Andro
 ### 投研伙伴（首页 `/`）
 
 - **进房简报**：指数、北向资金、热门/主流板块、热点主题、盘前/盘中/尾盘/收盘节奏卡
-- **多会话**：左侧会话列表（sessionStorage），可新建 / 切换 / 删除；切到个股详情再回对话不丢上下文
+- **多会话**：左侧会话列表（sessionStorage），可新建 / 切换 / 删除；切到个股详情再回对话不丢上下文；会话旁显示 Memory 摘要主题
 - **Agent Run（SSE 真流式）**：`POST /api/v1/ai/companion/chat/stream`  
   事件：`message.start` → `research.plan` → `tool.*` → `block` → `message.delta` → `message.end`  
   前端展示状态条 + 研究计划 + 工具行；可**取消**或**打断并发送**开启新一轮
 - **结构化块**：指数、北向、板块、选股结果（分页）、个股卡、每日笔记、AI 解读、自选、**异动**、建议 chips
+- **投研记忆（Memory）**：设置页关注方向；分析/板块选股自动记研究历史；长会话启发式摘要；自由对话注入 LLM 上下文
 - **研究工作台**：市场总览 / 个股行情 · K 线 · 新闻公告 · 分析 · 模拟下单，与对话意图联动
 - **自选异动**：涨跌 / 量比 / 换手 / 主力买卖资金 / 是否拉升；设置页可改阈值；简报与页内提醒
 - **每日推荐归档**：盘前/盘中等推荐写入 `data/daily-picks/`，设置页可按日翻看（含 30 只分页）
@@ -84,6 +85,7 @@ Go API :18080
 | `services/api-go/internal/companion/anomaly.go` | 自选异动规则与扫描 |
 | `services/api-go/internal/companion/briefing.go` / `chat.go` / `notify.go` | 简报、意图路由、Notification Agent |
 | `services/api-go/internal/conversation/` | 会话与 research_events 持久化 |
+| `services/api-go/internal/memory/` | 用户偏好 / 研究历史 / 会话摘要 |
 | `services/api-go/internal/dailypicks/` | 每日推荐持久化 |
 | `services/api-go/internal/httpserver/server.go` | 路由注册 |
 
@@ -101,6 +103,7 @@ Go API :18080
 8. **会话持久化**：`GET/PUT /api/v1/conversations` + `POST /api/v1/research/events`；本地 sessionStorage 作缓存，启动时与服务端同步
 9. **对比 / 风险块**：意图「对比」产出 comparison 表；分析附带 risk 卡；右侧 Workspace 支持 VS 视图
 10. **板块内选股/推荐**：说「在半导体选股」「在新能源推荐」会匹配概念/行业板并在成分内筛选；找不到精确板名时走 **选股理解员**（方舟模型）推理相关板块再跑五算法
+11. **Memory**：`GET/PATCH /api/v1/memory*`；分析与板块研究自动记入；自由对话注入 Relevant Memory；设置页可改关注方向
 
 建议下一步：
 
@@ -108,10 +111,10 @@ Go API :18080
 - [x] Notification Agent 后台定时（不仅页内 poll）
 - [x] 服务端会话 / research_events 持久化（现在是 sessionStorage）
 - [x] 更丰富 Workspace 块（对比、风险卡等，见 V2 文档 Phase 2–4）
-- [ ] Memory 用户偏好 / 长会话摘要（V2 Phase 4）
+- [x] Memory 用户偏好 / 长会话摘要（V2 Phase 4）
 - [ ] 行业 / 题材 Workspace 对象（sector / topic）
 
-本地数据（不进 Git）：`services/api-go/data/watchlist.json`、`paper.json`、`anomaly_rules.json`、`notifications.json`、`conversations.json`、`daily-picks/`。换机后自选与模拟账户需重新加或自行拷贝。
+本地数据（不进 Git）：`services/api-go/data/watchlist.json`、`paper.json`、`anomaly_rules.json`、`notifications.json`、`conversations.json`、`memory.json`、`daily-picks/`。换机后自选与模拟账户需重新加或自行拷贝。
 
 ## 五套选股算法
 
@@ -142,21 +145,21 @@ Go API :18080
 
 | 环境变量 | 用途 |
 |---|---|
-| `LLM_AIHUBMIX_KEY` | AIHubMix，也认 `AIHUBMIX_API_KEY` |
 | `LLM_DEEPSEEK_KEY` | DeepSeek |
 | `LLM_QWEN_KEY` | 通义千问兼容接口 |
 | `ARK_API_KEY` | 火山方舟（官方变量名，优先） |
 | `LLM_ARK_KEY` | 火山方舟备用 |
-| `LLM_ARK_MODEL` | 可选，覆盖豆包 Seed 的 Model ID / 推理接入点 `ep-xxx` |
+| `LLM_ARK_MODEL` / `ARK_MODEL` | 可选，覆盖豆包 Seed Pro 的 Model ID / 推理接入点 `ep-xxx` |
+| `LLM_ARK_LITE_MODEL` / `ARK_LITE_MODEL` | 可选，覆盖豆包 Seed 2.1 Lite 的 Model ID / `ep-xxx` |
 | `NOTIFY_INTERVAL_SEC` | Notification Agent 扫描间隔，默认 120，最小 30 |
 
-不配密钥也能用内置 `quant-rules`。对话默认走火山方舟 [Chat API](https://www.volcengine.com/docs/82379/1112500)（`https://ark.cn-beijing.volces.com/api/v3`）：
+不配密钥也能用内置 `quant-rules`。默认分析与对话优先走火山方舟 [Chat API](https://www.volcengine.com/docs/82379/1112500)（`https://ark.cn-beijing.volces.com/api/v3`）：
 
 ```text
-doubao-seed-2-1-pro → deepseek-v4-flash → quant-rules
+doubao-seed-2-1-lite → doubao-seed-2-1-pro → deepseek-v4-flash → quant-rules
 ```
 
-空 `{}`、429、额度不足时跳过约 6 小时再试下一个。对话输入框可切模型。其他供应商先停用。设置页 Profile：快速 / 火山方舟。
+空 `{}`、429、额度不足时跳过约 6 小时再试下一个。对话输入框可切模型。其他供应商先停用。设置页 Profile：快速 / 火山方舟 / Pro 优先 / 多模型综合。个股分析走 NDJSON 进度流（`/api/v1/ai/analyze/stream`）。
 
 ## Agent Prompt
 

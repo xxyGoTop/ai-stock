@@ -96,12 +96,14 @@ def context_vars(context: dict) -> dict:
         flag = "命中" if hit.get("pass") else "未命中"
         name = hit.get("short") or hit.get("name") or hit.get("algorithmCode")
         lines.append(f"- {name} {flag}：{hit.get('reason') or ''}")
-    slim = {key: context.get(key) for key in ("stock", "indicators", "rps", "algorithmHits") if key in context}
+    slim_keys = ("stock", "indicators", "rps", "algorithmHits", "sector", "attribution")
+    slim = {key: context.get(key) for key in slim_keys if key in context}
     out = {
         "stock": stock,
         "indicators": indicators,
         "rps": context.get("rps") or {},
         "algorithm_lines": "\n".join(lines) or "- 无算法结果",
+        "sector_lines": str(context.get("sector_lines") or "暂无板块/归因数据"),
         "context_json": json.dumps(slim, ensure_ascii=False)[:6000],
         "query": str(context.get("query") or ""),
     }

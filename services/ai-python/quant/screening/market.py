@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import time
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -16,10 +18,26 @@ FS = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"
 JSONP = re.compile(r"^[a-zA-Z0-9_]+\(")
 
 
-def _get(url: str, referer: str) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Referer": referer, "Accept": "*/*"})
-    with urllib.request.urlopen(req, timeout=8) as res:
-        return res.read()
+def _get(url: str, referer: str, retries: int = 3) -> bytes:
+    last: Exception | None = None
+    for i in range(max(1, retries)):
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "User-Agent": UA,
+                    "Referer": referer,
+                    "Accept": "application/json,text/plain,*/*",
+                    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                    "Connection": "close",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=10) as res:
+                return res.read()
+        except Exception as exc:
+            last = exc
+            time.sleep(0.25 * (i + 1))
+    raise last or RuntimeError(f"GET failed: {url}")
 
 
 def _json(url: str, referer: str):
@@ -130,6 +148,42 @@ def fetch_market_returns(pages=12) -> list[dict]:
 
 def fetch_quote(code: str) -> dict | None:
     code = str(code).zfill(6)
+    hit = _fetch_quote_ulist(code)
+    if hit and hit.get("price"):
+        if not hit.get("industry") or not hit.get("concepts"):
+            meta = _fetch_quote_stock_get(code) or _fetch_f10_boards(code)
+            if meta:
+                if not hit.get("industry"):
+                    hit["industry"] = meta.get("industry") or ""
+                if not hit.get("region"):
+                    hit["region"] = meta.get("region") or ""
+                if not hit.get("concepts"):
+                    hit["concepts"] = meta.get("concepts") or []
+        return hit
+    hit = _fetch_quote_stock_get(code, with_price=True)
+    if hit and hit.get("price"):
+        if not hit.get("industry") or not hit.get("concepts"):
+            meta = _fetch_f10_boards(code)
+            if meta:
+                if not hit.get("industry"):
+                    hit["industry"] = meta.get("industry") or ""
+                if not hit.get("concepts"):
+                    hit["concepts"] = meta.get("concepts") or []
+        return hit
+    via_go = _fetch_quote_via_go(code)
+    if via_go and via_go.get("price"):
+        if not via_go.get("industry") or not via_go.get("concepts"):
+            meta = _fetch_f10_boards(code)
+            if meta:
+                if not via_go.get("industry"):
+                    via_go["industry"] = meta.get("industry") or ""
+                if not via_go.get("concepts"):
+                    via_go["concepts"] = meta.get("concepts") or []
+        return via_go
+    return None
+
+
+def _fetch_quote_ulist(code: str) -> dict | None:
     market = 1 if guess_market(code) == "SH" else 0
     fields = "f12,f13,f14,f2,f3,f4,f5,f6,f7,f8,f10,f21,f62,f66,f69,f72,f75,f100,f102,f103,f184"
     query = f"fltt=2&invt=2&fields={fields}&secids={market}.{code}"
@@ -168,6 +222,116 @@ def fetch_quote(code: str) -> dict | None:
         except Exception:
             continue
     return None
+
+
+def _fetch_quote_stock_get(code: str, with_price: bool = False) -> dict | None:
+    """stock/get：行业在 f127，比 ulist 的 f100 更全。价格字段多为 *100 整数。"""
+    market = 1 if guess_market(code) == "SH" else 0
+    fields = "f57,f58,f43,f169,f170,f46,f44,f45,f47,f48,f50,f168,f100,f102,f103,f127"
+    path = f"/api/qt/stock/get?secid={market}.{code}&fields={fields}"
+    for host in EM_HOSTS:
+        try:
+            data = _json(f"{host}{path}", "https://quote.eastmoney.com/")
+            item = (data or {}).get("data") or {}
+            if not item:
+                continue
+            industry = str(item.get("f127") or item.get("f100") or "").strip()
+            concepts = [x.strip() for x in str(item.get("f103") or "").split(",") if x.strip()][:8]
+            out = {
+                "symbol": str(item.get("f57") or code).zfill(6),
+                "name": str(item.get("f58") or "").strip(),
+                "market": guess_market(code),
+                "industry": industry,
+                "region": str(item.get("f102") or "").strip(),
+                "concepts": concepts,
+                "fundKnown": False,
+            }
+            if with_price:
+                # f43 现价通常为「元 * 100」整数
+                price = _num(item.get("f43"))
+                if price > 1000:  # 启发式：茅台级或普通股放大 100
+                    price = price / 100.0
+                chg = _num(item.get("f169"))
+                if abs(chg) > 30:  # 涨跌额也可能 *100
+                    chg = chg / 100.0
+                chg_pct = _num(item.get("f170"))
+                if abs(chg_pct) > 30 and abs(chg_pct) < 3000:
+                    chg_pct = chg_pct / 100.0
+                out.update(
+                    {
+                        "price": price,
+                        "change": chg,
+                        "changePercent": chg_pct,
+                        "open": _num(item.get("f46")) / 100.0 if _num(item.get("f46")) > 1000 else _num(item.get("f46")),
+                        "high": _num(item.get("f44")) / 100.0 if _num(item.get("f44")) > 1000 else _num(item.get("f44")),
+                        "low": _num(item.get("f45")) / 100.0 if _num(item.get("f45")) > 1000 else _num(item.get("f45")),
+                        "volume": _num(item.get("f47")),
+                        "amount": _num(item.get("f48")),
+                        "volumeRatio": _num(item.get("f50")) / 100.0 if _num(item.get("f50")) > 20 else _num(item.get("f50")),
+                        "turnover": _num(item.get("f168")) / 100.0 if _num(item.get("f168")) > 100 else _num(item.get("f168")),
+                    }
+                )
+            return out
+        except Exception:
+            continue
+    return None
+
+
+def _fetch_quote_via_go(code: str) -> dict | None:
+    """Python 直连东财失败时，回退到本机 Go API（Go 客户端更稳）。"""
+    base = (os.getenv("GO_API_URL") or os.getenv("API_GO_URL") or "http://127.0.0.1:18080").rstrip("/")
+    try:
+        raw = _get(f"{base}/api/v1/stocks/{code}", base, retries=2)
+        payload = json.loads(raw.decode("utf-8", "ignore"))
+        data = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(data, dict) or not data.get("price"):
+            return None
+        return {
+            "symbol": str(data.get("symbol") or code).zfill(6),
+            "name": str(data.get("name") or "").strip(),
+            "market": str(data.get("market") or guess_market(code)),
+            "price": _num(data.get("price")),
+            "changePercent": _num(data.get("changePercent")),
+            "change": _num(data.get("change")),
+            "volume": _num(data.get("volume")),
+            "amount": _num(data.get("amount")),
+            "turnover": _num(data.get("turnover")),
+            "volumeRatio": _num(data.get("volumeRatio")),
+            "amplitude": _num(data.get("amplitude")),
+            "industry": str(data.get("industry") or "").strip(),
+            "region": str(data.get("region") or "").strip(),
+            "concepts": list(data.get("concepts") or [])[:8],
+            "mainNetInflow": _num(data.get("mainNetInflow")),
+            "mainNetInflowPct": _num(data.get("mainNetInflowPct")),
+            "superNetInflow": _num(data.get("superNetInflow")),
+            "bigNetInflow": _num(data.get("bigNetInflow")),
+            "fundKnown": True,
+        }
+    except Exception:
+        return None
+
+
+def _fetch_f10_boards(code: str) -> dict:
+    """F10 核心题材：ssbk 第一项作行业，其余作概念。"""
+    code = str(code).zfill(6)
+    prefix = "SH" if guess_market(code) == "SH" else "SZ"
+    url = f"https://emweb.securities.eastmoney.com/PC_HSF10/CoreConception/PageAjax?code={prefix}{code}"
+    try:
+        data = _json(url, "https://emweb.securities.eastmoney.com/")
+    except Exception:
+        return {}
+    rows = data.get("ssbk") or []
+    names = []
+    seen = set()
+    for row in rows:
+        name = str((row or {}).get("BOARD_NAME") or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+    if not names:
+        return {}
+    return {"industry": names[0], "concepts": names[1:9]}
 
 
 def fetch_klines_tencent(code: str, limit=260) -> list[dict]:

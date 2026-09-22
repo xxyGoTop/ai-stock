@@ -20,6 +20,8 @@ export interface Quote extends Stock {
   volumeRatio: number
   amplitude: number
   industry: string
+  region?: string
+  concepts?: string[]
   mainNetInflow?: number
   mainNetInflowPct?: number
   superNetInflow?: number
@@ -163,6 +165,21 @@ export interface StockAnalysis {
   cards: AnalysisCard[]
   summaries: { modelCode: string; summary: string }[]
   algorithmHits: { algorithmCode: string; short?: string; name?: string; pass: boolean; score: number; reason: string }[]
+  attribution?: {
+    primary?: string
+    primaryLabel?: string
+    explanation?: string
+    move?: string
+    stockChangePercent?: number
+    industryChangePercent?: number | null
+    drivers?: { kind?: string; label?: string; detail?: string }[]
+  }
+  sector?: {
+    industry?: string
+    concepts?: string[]
+    industryBoard?: { name?: string; changePercent?: number; change5?: number; leader?: string }
+    attribution?: StockAnalysis['attribution']
+  }
 }
 
 export interface HotNews {
@@ -583,5 +600,32 @@ export interface ResearchEvent {
   input?: unknown
   output?: unknown
   createdAt?: number
+}
+
+export interface MemoryPreferences {
+  focusThemes: string[]
+  note?: string
+}
+
+export interface MemoryResearchItem {
+  key: string
+  kind: string
+  label: string
+  count: number
+  lastAt: number
+}
+
+export interface ConversationSummary {
+  conversationId: string
+  topic: string
+  importantFacts: string[]
+  openQuestions: string[]
+  updatedAt?: number
+}
+
+export interface MemorySnapshot {
+  preferences: MemoryPreferences
+  research: MemoryResearchItem[]
+  summaries: ConversationSummary[]
 }
 

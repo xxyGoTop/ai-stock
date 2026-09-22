@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/dailypicks"
+	"github.com/xxyGoTop/ai-stock/services/api-go/internal/memory"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/provider"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/python"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/watchlist"
@@ -82,12 +83,13 @@ type ChatTurn struct {
 }
 
 type ChatRequest struct {
-	Message     string     `json:"message"`
-	Symbol      string     `json:"symbol,omitempty"`
-	Action      string     `json:"action,omitempty"` // analyze | watch | paper | kline | briefing | recommend
-	ProfileCode string     `json:"profileCode,omitempty"`
-	ModelCode   string     `json:"modelCode,omitempty"`
-	Messages    []ChatTurn `json:"messages,omitempty"`
+	Message        string     `json:"message"`
+	Symbol         string     `json:"symbol,omitempty"`
+	Action         string     `json:"action,omitempty"` // analyze | watch | paper | kline | briefing | recommend
+	ProfileCode    string     `json:"profileCode,omitempty"`
+	ModelCode      string     `json:"modelCode,omitempty"`
+	Messages       []ChatTurn `json:"messages,omitempty"`
+	ConversationID string     `json:"conversationId,omitempty"`
 }
 
 type ChatResponse struct {
@@ -102,20 +104,26 @@ type Service struct {
 	py     *python.Client
 	watch  *watchlist.Store
 	picks  *dailypicks.Store
+	mem    *memory.Store
 	rules  *RulesStore
 	notify *notifyStore
 	once   sync.Once
 }
 
-func New(bundle *provider.Bundle, py *python.Client, watch *watchlist.Store, picks *dailypicks.Store) *Service {
+func New(bundle *provider.Bundle, py *python.Client, watch *watchlist.Store, picks *dailypicks.Store, mem *memory.Store) *Service {
 	return &Service{
 		bundle: bundle,
 		py:     py,
 		watch:  watch,
 		picks:  picks,
+		mem:    mem,
 		rules:  NewRulesStore(),
 		notify: newNotifyStore(),
 	}
+}
+
+func (s *Service) Memory() *memory.Store {
+	return s.mem
 }
 
 func (s *Service) GetAnomalyRules() AnomalyRules {

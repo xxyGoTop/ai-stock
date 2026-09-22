@@ -8,13 +8,6 @@
       "enabled": true
     },
     {
-      "code": "aihubmix",
-      "kind": "openai_compatible",
-      "baseUrl": "https://aihubmix.com/v1",
-      "apiKeyRef": "env:LLM_AIHUBMIX_KEY|AIHUBMIX_API_KEY",
-      "enabled": false
-    },
-    {
       "code": "deepseek",
       "kind": "openai_compatible",
       "baseUrl": "https://api.deepseek.com",
@@ -50,30 +43,6 @@
       "enabled": true
     },
     {
-      "code": "agents-a1-free",
-      "label": "Agents A1",
-      "providerCode": "aihubmix",
-      "modelName": "agents-a1-free",
-      "roles": ["analyst", "screener", "planner", "judge"],
-      "maxTokens": 2048,
-      "timeoutMs": 90000,
-      "costTier": "free",
-      "jsonMode": false,
-      "enabled": false
-    },
-    {
-      "code": "intern-s2-free",
-      "label": "Intern S2",
-      "providerCode": "aihubmix",
-      "modelName": "intern-s2-free",
-      "roles": ["analyst", "judge"],
-      "maxTokens": 2048,
-      "timeoutMs": 90000,
-      "costTier": "free",
-      "jsonMode": false,
-      "enabled": false
-    },
-    {
       "code": "deepseek-chat",
       "label": "DeepSeek",
       "providerCode": "deepseek",
@@ -94,6 +63,19 @@
       "timeoutMs": 90000,
       "costTier": "mid",
       "enabled": false
+    },
+    {
+      "code": "doubao-seed-2-1-lite",
+      "label": "豆包 Seed 2.1 Lite",
+      "providerCode": "volcengine_ark",
+      "modelName": "doubao-seed-2-1-lite",
+      "modelNameRef": "env:LLM_ARK_LITE_MODEL|ARK_LITE_MODEL",
+      "roles": ["analyst", "screener", "planner", "judge"],
+      "maxTokens": 2048,
+      "timeoutMs": 60000,
+      "costTier": "low",
+      "jsonMode": false,
+      "enabled": true
     },
     {
       "code": "doubao-seed-2-1-pro",
@@ -124,7 +106,7 @@
   "profiles": [
     {
       "code": "stock_analysis_fast",
-      "name": "快速",
+      "name": "快速（规则）",
       "task": "stock_analysis",
       "agentCode": "stock_analyst",
       "mode": "single",
@@ -134,48 +116,48 @@
     },
     {
       "code": "stock_analysis_default",
-      "name": "AIHubMix 回退",
+      "name": "火山方舟（默认）",
       "task": "stock_analysis",
       "agentCode": "stock_analyst",
       "mode": "fallback",
       "models": [
-        { "modelCode": "agents-a1-free", "weight": 1, "temperature": 0.2 },
-        { "modelCode": "intern-s2-free", "weight": 1, "temperature": 0.2 },
-        { "modelCode": "deepseek-chat", "weight": 1, "temperature": 0.2 },
-        { "modelCode": "qwen-plus", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "doubao-seed-2-1-lite", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "doubao-seed-2-1-pro", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "deepseek-v4-flash", "weight": 1, "temperature": 0.2 },
         { "modelCode": "quant-rules", "weight": 1, "temperature": 0 }
       ],
-      "fallback": ["agents-a1-free", "intern-s2-free", "deepseek-chat", "qwen-plus", "quant-rules"],
-      "enabled": false
+      "fallback": ["doubao-seed-2-1-lite", "doubao-seed-2-1-pro", "deepseek-v4-flash", "quant-rules"],
+      "enabled": true
     },
     {
       "code": "stock_analysis_ark",
-      "name": "火山方舟",
+      "name": "火山方舟 Pro 优先",
       "task": "stock_analysis",
       "agentCode": "stock_analyst",
       "mode": "fallback",
       "models": [
         { "modelCode": "doubao-seed-2-1-pro", "weight": 1, "temperature": 0.2 },
+        { "modelCode": "doubao-seed-2-1-lite", "weight": 1, "temperature": 0.2 },
         { "modelCode": "deepseek-v4-flash", "weight": 1, "temperature": 0.2 },
         { "modelCode": "quant-rules", "weight": 1, "temperature": 0 }
       ],
-      "fallback": ["doubao-seed-2-1-pro", "deepseek-v4-flash", "quant-rules"],
+      "fallback": ["doubao-seed-2-1-pro", "doubao-seed-2-1-lite", "deepseek-v4-flash", "quant-rules"],
       "enabled": true
     },
     {
       "code": "stock_analysis_ensemble",
-      "name": "多模型综合",
+      "name": "方舟多模型综合",
       "task": "stock_analysis",
       "agentCode": "stock_analyst",
       "mode": "ensemble",
       "models": [
-        { "modelCode": "quant-rules", "weight": 0.2, "temperature": 0 },
-        { "modelCode": "agents-a1-free", "weight": 0.4, "temperature": 0.2 },
-        { "modelCode": "intern-s2-free", "weight": 0.4, "temperature": 0.2 }
+        { "modelCode": "doubao-seed-2-1-lite", "weight": 0.35, "temperature": 0.2 },
+        { "modelCode": "deepseek-v4-flash", "weight": 0.35, "temperature": 0.2 },
+        { "modelCode": "quant-rules", "weight": 0.3, "temperature": 0 }
       ],
-      "fallback": ["quant-rules"],
+      "fallback": ["doubao-seed-2-1-lite", "quant-rules"],
       "judgeModelCode": "quant-rules",
-      "enabled": false
+      "enabled": true
     }
   ]
 }

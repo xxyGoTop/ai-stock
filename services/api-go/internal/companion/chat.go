@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/dailypicks"
+	"github.com/xxyGoTop/ai-stock/services/api-go/internal/memory"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/provider"
 )
 
@@ -27,91 +28,111 @@ func (s *Service) Chat(req ChatRequest) (*ChatResponse, error) {
 		symbol = extractSymbol(msg)
 	}
 
+	var (
+		res *ChatResponse
+		err error
+	)
 	switch action {
 	case "briefing", "market":
-		b, err := s.BuildBriefing()
-		if err != nil {
-			return nil, err
+		b, err2 := s.BuildBriefing()
+		if err2 != nil {
+			return nil, err2
 		}
-		return &ChatResponse{
+		res = &ChatResponse{
 			Reply:  b.MarketSummary,
 			Intent: "briefing",
 			Blocks: b.Blocks,
 			Workspace: &WorkspaceHint{Type: "market", Tab: "overview"},
-		}, nil
+		}
 	case "hot":
-		return s.hotFeed()
+		res, err = s.hotFeed()
 	case "screening":
 		if hint := extractBoardHint(msg); hint != "" {
-			return s.screenInBoard(msg, hint)
+			res, err = s.screenInBoard(msg, hint)
+		} else {
+			res, err = s.runScreening()
 		}
-		return s.runScreening()
 	case "recommend", "preopen", "intraday", "close_auction", "review":
 		if hint := extractBoardHint(msg); hint != "" {
-			return s.recommendInBoard(action, msg, hint)
+			res, err = s.recommendInBoard(action, msg, hint)
+		} else {
+			res, err = s.recommend(action, msg)
 		}
-		return s.recommend(action, msg)
 	case "analyze":
-		return s.analyzeStock(symbol, msg, req)
+		res, err = s.analyzeStock(symbol, msg, req)
 	case "compare":
-		return s.compareStocks(msg, symbol)
+		res, err = s.compareStocks(msg, symbol)
 	case "watch":
-		return s.addWatch(symbol, msg)
+		res, err = s.addWatch(symbol, msg)
 	case "unwatch":
-		return s.removeWatch(symbol, msg)
+		res, err = s.removeWatch(symbol, msg)
 	case "watch_clear":
-		return s.clearWatchlist()
+		res, err = s.clearWatchlist()
 	case "paper":
-		return s.paperHint(symbol, msg)
+		res, err = s.paperHint(symbol, msg)
 	case "kline":
-		return s.klineHint(symbol, msg)
+		res, err = s.klineHint(symbol, msg)
 	case "watchlist":
-		return s.showWatchlist()
+		res, err = s.showWatchlist()
 	case "watch_anomaly", "anomaly":
-		return s.showAnomalies()
+		res, err = s.showAnomalies()
+	case "memory", "preference":
+		res, err = s.showMemory()
 	case "tomorrow_plan":
 		// 有标的则加入，否则展示列表
 		if symbol != "" && symbol != "000000" {
-			return s.addTomorrowPlan(symbol, msg)
+			res, err = s.addTomorrowPlan(symbol, msg)
+		} else if extractSymbol(msg) != "" || strings.Contains(msg, "加入") || strings.Contains(msg, "添加") {
+			res, err = s.addTomorrowPlan(symbol, msg)
+		} else {
+			res, err = s.showTomorrowPlans()
 		}
-		if extractSymbol(msg) != "" || strings.Contains(msg, "加入") || strings.Contains(msg, "添加") {
-			return s.addTomorrowPlan(symbol, msg)
-		}
-		return s.showTomorrowPlans()
 	case "today_ops", "today_plan":
-		return s.showTodayOps()
+		res, err = s.showTodayOps()
 	default:
 		if symbol != "" && symbol != "000000" {
-			return s.analyzeStock(symbol, msg, req)
-		}
-		if looksLikeHot(msg) {
-			return s.hotFeed()
-		}
-		if looksLikeScreening(msg) {
+			res, err = s.analyzeStock(symbol, msg, req)
+		} else if looksLikeHot(msg) {
+			res, err = s.hotFeed()
+		} else if looksLikeScreening(msg) {
 			if hint := extractBoardHint(msg); hint != "" {
-				return s.screenInBoard(msg, hint)
+				res, err = s.screenInBoard(msg, hint)
+			} else {
+				res, err = s.runScreening()
 			}
-			return s.runScreening()
-		}
-		if looksLikeRecommend(msg) {
+		} else if looksLikeRecommend(msg) {
 			if hint := extractBoardHint(msg); hint != "" {
-				return s.recommendInBoard("recommend", msg, hint)
+				res, err = s.recommendInBoard("recommend", msg, hint)
+			} else {
+				res, err = s.recommend("recommend", msg)
 			}
-			return s.recommend("recommend", msg)
+		} else if looksLikeMarket(msg) {
+			return s.Chat(ChatRequest{Message: msg, Action: "briefing", ConversationID: req.ConversationID})
+		} else if looksLikeMemory(msg) {
+			res, err = s.showMemory()
+		} else {
+			res, err = s.modelChat(req)
 		}
-		if looksLikeMarket(msg) {
-			return s.Chat(ChatRequest{Message: msg, Action: "briefing"})
-		}
-		return s.modelChat(req)
 	}
+	if err != nil || res == nil {
+		return res, err
+	}
+	s.afterChatMemory(req, res)
+	return res, nil
 }
 
 func (s *Service) modelChat(req ChatRequest) (*ChatResponse, error) {
-	payload, _ := json.Marshal(map[string]interface{}{
+	body := map[string]interface{}{
 		"message":   strings.TrimSpace(req.Message),
 		"messages":  req.Messages,
 		"modelCode": strings.TrimSpace(req.ModelCode),
-	})
+	}
+	if s.mem != nil {
+		if ctx := s.mem.RelevantContext(req.ConversationID); ctx != "" {
+			body["memoryContext"] = ctx
+		}
+	}
+	payload, _ := json.Marshal(body)
 	raw, err := s.py.Chat(payload)
 	if err != nil {
 		return &ChatResponse{
@@ -134,10 +155,88 @@ func (s *Service) modelChat(req ChatRequest) (*ChatResponse, error) {
 		Reply:  strings.TrimSpace(data.Reply),
 		Intent: "chat",
 		Blocks: []Block{
-			{Type: "suggestions", Title: "也可以", Items: []string{"今天行情", "今日热点", "帮我选股", "分析茅台"}},
+			{Type: "suggestions", Title: "也可以", Items: []string{"今天行情", "今日热点", "帮我选股", "分析茅台", "我的关注"}},
 		},
 		Workspace: &WorkspaceHint{Type: "empty"},
 	}, nil
+}
+
+func (s *Service) showMemory() (*ChatResponse, error) {
+	if s.mem == nil {
+		return &ChatResponse{
+			Reply:  "记忆功能未启用。可在设置页配置关注方向。",
+			Intent: "memory",
+		}, nil
+	}
+	snap := s.mem.Get()
+	var lines []string
+	if len(snap.Preferences.FocusThemes) > 0 {
+		lines = append(lines, "关注方向："+strings.Join(snap.Preferences.FocusThemes, "、"))
+	} else {
+		lines = append(lines, "还没有设置关注方向，可在「设置 → 投研记忆」里添加，例如 AI、新能源。")
+	}
+	if note := strings.TrimSpace(snap.Preferences.Note); note != "" {
+		lines = append(lines, "备注："+note)
+	}
+	if len(snap.Research) > 0 {
+		n := len(snap.Research)
+		if n > 8 {
+			n = 8
+		}
+		items := make([]string, 0, n)
+		for i := 0; i < n; i++ {
+			r := snap.Research[i]
+			if r.Label != "" && r.Label != r.Key {
+				items = append(items, fmt.Sprintf("%s（%s）", r.Label, r.Key))
+			} else {
+				items = append(items, r.Label)
+			}
+		}
+		lines = append(lines, "近期研究："+strings.Join(items, "、"))
+	} else {
+		lines = append(lines, "近期还没有研究记录；说「分析茅台」或「在半导体选股」会自动记下来。")
+	}
+	reply := strings.Join(lines, "\n")
+	return &ChatResponse{
+		Reply:  reply,
+		Intent: "memory",
+		Blocks: []Block{
+			{Type: "text", Title: "投研记忆", Text: reply},
+			{Type: "suggestions", Items: []string{"分析茅台", "在新能源选股", "今日热点"}},
+		},
+		Workspace: &WorkspaceHint{Type: "empty"},
+	}, nil
+}
+
+func (s *Service) afterChatMemory(req ChatRequest, res *ChatResponse) {
+	if s.mem == nil || res == nil {
+		return
+	}
+	if res.Workspace != nil {
+		ws := res.Workspace
+		if ws.Type == "stock" && ws.Symbol != "" {
+			s.mem.RecordResearch(ws.Symbol, "symbol", ws.Name)
+		}
+		if ws.Type == "compare" {
+			if ws.Symbol != "" {
+				s.mem.RecordResearch(ws.Symbol, "symbol", ws.Name)
+			}
+			if ws.CompareSymbol != "" {
+				s.mem.RecordResearch(ws.CompareSymbol, "symbol", ws.CompareName)
+			}
+		}
+	}
+	if hint := extractBoardHint(req.Message); hint != "" {
+		s.mem.RecordResearch(hint, "board", hint)
+	}
+	if req.ConversationID == "" {
+		return
+	}
+	turns := make([]memory.ChatTurn, 0, len(req.Messages))
+	for _, m := range req.Messages {
+		turns = append(turns, memory.ChatTurn{Role: m.Role, Content: m.Content})
+	}
+	s.mem.RefreshSummaryFromTurns(req.ConversationID, turns, req.Message)
 }
 
 func detectIntent(msg, symbol string) string {
@@ -179,6 +278,8 @@ func detectIntent(msg, symbol string) string {
 		return "tomorrow_plan"
 	case strings.Contains(msg, "异动") || strings.Contains(msg, "自选提醒") || strings.Contains(msg, "盯盘"):
 		return "watch_anomaly"
+	case looksLikeMemory(msg):
+		return "memory"
 	case looksLikeCompare(msg):
 		return "compare"
 	case strings.Contains(msg, "我的自选") || msg == "自选股" || strings.Contains(msg, "自选列表") || strings.Contains(msg, "看看自选"):
@@ -209,6 +310,19 @@ func looksLikeHot(msg string) bool {
 		if strings.Contains(msg, k) {
 			return true
 		}
+	}
+	return false
+}
+
+func looksLikeMemory(msg string) bool {
+	keys := []string{"我的关注", "我的偏好", "关注方向", "投研记忆", "我关注什么", "记忆里", "我的记忆"}
+	for _, k := range keys {
+		if strings.Contains(msg, k) {
+			return true
+		}
+	}
+	if strings.Contains(msg, "偏好") && (strings.Contains(msg, "看") || strings.Contains(msg, "设置") || strings.Contains(msg, "我的")) {
+		return true
 	}
 	return false
 }
@@ -515,16 +629,150 @@ func (s *Service) cachedPicksReply(intent, title string, kinds []string) *ChatRe
 	return &ChatResponse{Reply: reply, Intent: intent, Blocks: blocks, Workspace: ws}
 }
 
-func analyzePayload(symbol string, req ChatRequest) []byte {
-	body := map[string]string{"symbol": symbol}
+func analyzePayload(symbol string, req ChatRequest, extras map[string]interface{}) []byte {
+	body := map[string]interface{}{"symbol": symbol}
 	if strings.TrimSpace(req.ProfileCode) != "" {
 		body["profileCode"] = strings.TrimSpace(req.ProfileCode)
 	}
 	if strings.TrimSpace(req.ModelCode) != "" {
 		body["modelCode"] = strings.TrimSpace(req.ModelCode)
 	}
+	for k, v := range extras {
+		if v == nil {
+			continue
+		}
+		body[k] = v
+	}
 	raw, _ := json.Marshal(body)
 	return raw
+}
+
+// collectAnalyzeExtras 汇总新闻/公告标题与热点题材，供 Python 板块归因。
+func (s *Service) collectAnalyzeExtras(symbol string, quote *provider.Quote) (map[string]interface{}, []Block, *provider.StockNewsFeed) {
+	extras := map[string]interface{}{}
+	blocks := []Block{}
+	var feed *provider.StockNewsFeed
+
+	// Go 侧行情更稳；注入 Python，避免 ai-python 直连东财失败后现价全变成 0
+	if quote != nil && quote.Price > 0 {
+		extras["quote"] = map[string]interface{}{
+			"symbol":           quote.Symbol,
+			"name":             quote.Name,
+			"market":           string(quote.Market),
+			"price":            quote.Price,
+			"change":           quote.Change,
+			"changePercent":    quote.ChangePercent,
+			"turnover":         quote.Turnover,
+			"volumeRatio":      quote.VolumeRatio,
+			"volume":           quote.Volume,
+			"amount":           quote.Amount,
+			"industry":         quote.Industry,
+			"region":           quote.Region,
+			"concepts":         quote.Concepts,
+			"mainNetInflow":    quote.MainNetInflow,
+			"mainNetInflowPct": quote.MainNetInflowPct,
+			"superNetInflow":   quote.SuperNetInflow,
+			"bigNetInflow":     quote.BigNetInflow,
+		}
+	}
+
+	if quote != nil && strings.TrimSpace(quote.Industry) != "" {
+		if board, err := s.bundle.FindBoard(quote.Industry); err == nil && board != nil {
+			blocks = append(blocks, Block{
+				Type:   "boards",
+				Title:  "所属板块",
+				Text:   fmt.Sprintf("%s 今日 %+.2f%%（近5日 %+.2f%%），领涨 %s", board.Name, board.ChangePercent, board.Change5, board.Leader),
+				Items:  []provider.HotBoard{*board},
+				Symbol: symbol,
+			})
+		}
+	}
+
+	if f, err := s.bundle.StockNews(symbol, 5); err == nil && f != nil {
+		feed = f
+		newsTitles := make([]string, 0, len(f.News))
+		for _, n := range f.News {
+			if t := strings.TrimSpace(n.Title); t != "" {
+				newsTitles = append(newsTitles, t)
+			}
+		}
+		noticeTitles := make([]string, 0, len(f.Notices))
+		for _, n := range f.Notices {
+			if t := strings.TrimSpace(n.Title); t != "" {
+				noticeTitles = append(noticeTitles, t)
+			}
+		}
+		if len(newsTitles) > 0 {
+			extras["newsTitles"] = newsTitles
+		}
+		if len(noticeTitles) > 0 {
+			extras["noticeTitles"] = noticeTitles
+		}
+	}
+
+	if hot, err := s.bundle.HotFeed(12); err == nil && hot != nil {
+		topics := make([]string, 0, len(hot.Topics))
+		for _, t := range hot.Topics {
+			if name := strings.TrimSpace(t.Topic); name != "" {
+				topics = append(topics, name)
+			}
+		}
+		if len(topics) > 0 {
+			extras["hotTopics"] = topics
+		}
+	}
+	return extras, blocks, feed
+}
+
+func asStringSlice(v interface{}) []string {
+	switch t := v.(type) {
+	case []string:
+		return t
+	case []interface{}:
+		out := make([]string, 0, len(t))
+		for _, x := range t {
+			if s, ok := x.(string); ok && strings.TrimSpace(s) != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func attributionBlockFromAnalysis(symbol string, analysis interface{}) *Block {
+	m, ok := analysis.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	attr, _ := m["attribution"].(map[string]interface{})
+	if attr == nil {
+		if sector, _ := m["sector"].(map[string]interface{}); sector != nil {
+			attr, _ = sector["attribution"].(map[string]interface{})
+		}
+	}
+	if attr == nil {
+		return nil
+	}
+	label, _ := attr["primaryLabel"].(string)
+	expl, _ := attr["explanation"].(string)
+	if label == "" && expl == "" {
+		return nil
+	}
+	text := expl
+	if label != "" && expl != "" {
+		text = label + " · " + expl
+	} else if label != "" {
+		text = label
+	}
+	return &Block{
+		Type:   "attribution",
+		Title:  "涨跌归因",
+		Text:   text,
+		Data:   attr,
+		Symbol: symbol,
+	}
 }
 
 func (s *Service) analyzeStock(symbol, msg string, req ChatRequest) (*ChatResponse, error) {
@@ -574,23 +822,28 @@ func (s *Service) analyzeStock(symbol, msg string, req ChatRequest) (*ChatRespon
 		}
 	}
 
-	// LLM 分析（无 key 时会走 quant-rules）
-	if raw, err := s.py.Analyze(analyzePayload(symbol, req)); err == nil && len(raw) > 0 {
-		var analysis interface{}
-		if json.Unmarshal(raw, &analysis) == nil {
-			blocks = append(blocks, Block{Type: "analysis", Title: "AI 解读", Data: analysis, Symbol: symbol})
-			if rb := buildRiskBlock(symbol, analysis); rb != nil {
-				blocks = append(blocks, *rb)
-			}
-		}
-	}
-
-	if feed, nerr := s.bundle.StockNews(symbol, 5); nerr == nil && feed != nil {
+	extras, sectorBlocks, feed := s.collectAnalyzeExtras(symbol, quote)
+	blocks = append(blocks, sectorBlocks...)
+	if feed != nil {
 		if len(feed.News) > 0 {
 			blocks = append(blocks, Block{Type: "news", Title: "相关新闻", Items: feed.News, Symbol: symbol})
 		}
 		if len(feed.Notices) > 0 {
 			blocks = append(blocks, Block{Type: "news", Title: "近期公告", Items: feed.Notices, Symbol: symbol})
+		}
+	}
+
+	// LLM 分析（无 key 时会走 quant-rules）；带上新闻/公告/热点供归因
+	if raw, err := s.py.Analyze(analyzePayload(symbol, req, extras)); err == nil && len(raw) > 0 {
+		var analysis interface{}
+		if json.Unmarshal(raw, &analysis) == nil {
+			blocks = append(blocks, Block{Type: "analysis", Title: "AI 解读", Data: analysis, Symbol: symbol})
+			if ab := attributionBlockFromAnalysis(symbol, analysis); ab != nil {
+				blocks = append(blocks, *ab)
+			}
+			if rb := buildRiskBlock(symbol, analysis); rb != nil {
+				blocks = append(blocks, *rb)
+			}
 		}
 	}
 
@@ -602,7 +855,7 @@ func (s *Service) analyzeStock(symbol, msg string, req ChatRequest) (*ChatRespon
 		Items:   []string{"加入自选", "加入明日计划", "加入模拟交易", "打开今日K线"},
 	})
 
-	reply := fmt.Sprintf("已整理 %s 的快照、新闻与分析。可加入自选或明日计划，右侧可看 K 线和公告。", quote.Name)
+	reply := fmt.Sprintf("已整理 %s 的快照、板块归因、新闻与分析。可加入自选或明日计划，右侧可看 K 线和公告。", quote.Name)
 	return &ChatResponse{
 		Reply:  reply,
 		Intent: "analyze",

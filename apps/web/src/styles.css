@@ -471,6 +471,37 @@ a {
   margin-top: 12px;
 }
 
+.analyze-progress {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(74, 127, 212, 0.08);
+}
+
+.analyze-progress ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+
+.analyze-progress li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 13px;
+  margin: 4px 0;
+}
+
+.analyze-progress li.done {
+  opacity: 0.85;
+}
+
+.analyze-progress .ap-mark {
+  width: 1.1em;
+  color: var(--accent, #4a7fd4);
+  flex-shrink: 0;
+}
+
 .verdict {
   display: flex;
   gap: 12px;
@@ -1160,6 +1191,21 @@ a {
   cursor: pointer;
   font-size: 13px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.session-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-topic {
+  font-size: 11px;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1641,6 +1687,40 @@ body.layout-fullscreen .app.companion-app {
 .ws-risk {
   border-left: 3px solid #c9a227;
   padding-left: 10px;
+}
+
+.attr-block,
+.attr-box {
+  border-left: 3px solid #4a7fd4;
+  padding-left: 10px;
+  margin-top: 8px;
+}
+
+.attr-box p,
+.attr-block p {
+  margin: 4px 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.attr-cards {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.attr-card {
+  background: rgba(74, 127, 212, 0.08);
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.attr-card .kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  margin-top: 4px;
 }
 
 .risk-block.level-high,

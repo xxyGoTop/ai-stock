@@ -11,9 +11,12 @@ import type {
   CompanionChatResponse,
   CompanionNotice,
   ConversationRecord,
+  ConversationSummary,
   ConversationSnapshot,
   AgentStreamEvent,
   DailyPickRecord,
+  MemoryPreferences,
+  MemorySnapshot,
   ResearchEvent,
   IndicatorResult,
   KlineBar,
@@ -97,6 +100,78 @@ export function analyzeStock(symbol: string, profileCode?: string, modelCode?: s
   return post<StockAnalysis>('/ai/analyze', { symbol, profileCode, modelCode })
 }
 
+export type AnalyzeProgress = {
+  step: string
+  title: string
+  status: string
+  summary?: string
+}
+
+/** NDJSON 进度流：progress → result */
+export async function analyzeStockStream(
+  symbol: string,
+  opts: {
+    profileCode?: string
+    modelCode?: string
+    onProgress?: (p: AnalyzeProgress) => void
+    signal?: AbortSignal
+  } = {},
+): Promise<StockAnalysis> {
+  const res = await fetch(`${API_BASE}/ai/analyze/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
+    body: JSON.stringify({
+      symbol,
+      profileCode: opts.profileCode,
+      modelCode: opts.modelCode,
+    }),
+    signal: opts.signal,
+  })
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+  if (!res.body) {
+    throw new Error('stream body empty')
+  }
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+  let result: StockAnalysis | null = null
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const parts = buffer.split('\n')
+    buffer = parts.pop() || ''
+    for (const line of parts) {
+      const text = line.trim()
+      if (!text) continue
+      let ev: { event?: string; step?: string; title?: string; status?: string; summary?: string; message?: string; data?: StockAnalysis }
+      try {
+        ev = JSON.parse(text)
+      } catch {
+        continue
+      }
+      if (ev.event === 'progress') {
+        opts.onProgress?.({
+          step: ev.step || '',
+          title: ev.title || '',
+          status: ev.status || '',
+          summary: ev.summary,
+        })
+      } else if (ev.event === 'result' && ev.data) {
+        result = ev.data
+      } else if (ev.event === 'error') {
+        throw new Error(ev.message || 'analyze failed')
+      }
+    }
+  }
+  if (!result) {
+    throw new Error('分析未返回结果')
+  }
+  return result
+}
+
 export function getHotFeed(limit = 15) {
   return get<HotFeed>(`/hot?limit=${limit}`)
 }
@@ -152,6 +227,33 @@ export function getNotifications() {
 
 export function ackNotifications(ids: string[]) {
   return patch<{ acked: number }>('/notifications', { ids })
+}
+
+export function getMemory() {
+  return get<MemorySnapshot>('/memory')
+}
+
+export function getMemoryPreferences() {
+  return get<MemoryPreferences>('/memory/preferences')
+}
+
+export function saveMemoryPreferences(prefs: MemoryPreferences) {
+  return patch<MemorySnapshot>('/memory/preferences', prefs)
+}
+
+export function recordMemoryResearch(input: { key: string; kind?: string; label?: string }) {
+  return post<MemorySnapshot>('/memory/research', input)
+}
+
+export function getConversationSummary(conversationId: string) {
+  return get<ConversationSummary>(`/memory/summaries/${encodeURIComponent(conversationId)}`)
+}
+
+export function saveConversationSummary(conversationId: string, body: Partial<ConversationSummary>) {
+  return put<ConversationSummary>(`/memory/summaries/${encodeURIComponent(conversationId)}`, {
+    ...body,
+    conversationId,
+  })
 }
 
 export function getConversationSnapshot() {
@@ -229,6 +331,7 @@ export function companionChat(body: {
   profileCode?: string
   modelCode?: string
   messages?: { role: string; content: string }[]
+  conversationId?: string
 }) {
   return post<CompanionChatResponse>('/ai/companion/chat', body)
 }
@@ -242,6 +345,7 @@ export async function companionChatStream(
     profileCode?: string
     modelCode?: string
     messages?: { role: string; content: string }[]
+    conversationId?: string
   },
   handlers: {
     onEvent: (ev: AgentStreamEvent) => void

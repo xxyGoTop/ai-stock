@@ -5,6 +5,7 @@ import {
   getCompanionBriefing,
   getIndicators,
   getKline,
+  getMemory,
   getNotifications,
   getStock,
   getStockNews,
@@ -45,6 +46,7 @@ import WatchButton from '../components/WatchButton'
 import {
   createConversation,
   deleteConversation,
+  flushConversationSync,
   hydrateFromServer,
   listConversations,
   loadActiveConversation,
@@ -70,6 +72,7 @@ const QUICK = [
   { label: '今日操作', message: '今日操作', action: 'today_ops' },
   { label: '对比', message: '茅台和比亚迪对比', action: 'compare' },
   { label: '异动', message: '看看自选异动', action: 'watch_anomaly' },
+  { label: '关注', message: '我的关注', action: 'memory' },
 ]
 
 const LAYOUT_KEY = 'ai-stock.layout.v1'
@@ -196,6 +199,7 @@ function applyConversation(c: Conversation) {
 export default function Chat() {
   const first = loadActiveConversation()
   const [conversations, setConversations] = useState(() => listConversations())
+  const [summaryTopics, setSummaryTopics] = useState<Record<string, string>>({})
   const [activeId, setActiveId] = useState(first.id)
   const [messages, setMessages] = useState<ChatMsg[]>(first.messages)
   const [input, setInput] = useState('')
@@ -253,6 +257,20 @@ export default function Chat() {
 
   function refreshList() {
     setConversations(listConversations())
+  }
+
+  function refreshMemoryTopics() {
+    void getMemory()
+      .then((snap) => {
+        const map: Record<string, string> = {}
+        for (const s of snap.summaries || []) {
+          if (s.conversationId && s.topic) map[s.conversationId] = s.topic
+        }
+        setSummaryTopics(map)
+      })
+      .catch(() => {
+        /* ignore */
+      })
   }
 
   function hydrate(c: Conversation) {
@@ -318,10 +336,13 @@ export default function Chat() {
       refreshList()
       persistRef.current = true
       void bootstrap()
+      refreshMemoryTopics()
     })()
     return () => {
       cancelled = true
       abortRef.current?.abort()
+      // 跳转个股详情等会卸载 Chat；立刻落盘，避免 debounce 未完成时被旧快照盖掉
+      void flushConversationSync()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -580,12 +601,13 @@ export default function Chat() {
           message: text || extra?.action || '',
           symbol: extra?.symbol,
           action: extra?.action,
-          profileCode: chatModel === 'auto' ? 'stock_analysis_ark' : undefined,
+          profileCode: chatModel === 'auto' ? 'stock_analysis_default' : undefined,
           modelCode: chatModel === 'auto' ? undefined : chatModel,
           messages: nextMsgs.slice(-10).map((m) => ({
             role: m.role === 'assistant' ? 'assistant' : 'user',
             content: m.text,
           })),
+          conversationId: activeId,
         },
         {
           onEvent: (ev) => {
@@ -601,6 +623,7 @@ export default function Chat() {
         tools: liveToolsRef.current,
       })
       setAgentState('done')
+      refreshMemoryTopics()
       void recordResearchRun({
         conversationId: activeId,
         intent: extra?.action || agentIntent || res.intent || '',
@@ -832,6 +855,7 @@ export default function Chat() {
         conversations={conversations}
         activeId={activeId}
         collapsed={sideCollapsed}
+        summaryTopics={summaryTopics}
         onToggleCollapse={() => setSideCollapsed((v) => !v)}
         onSelect={onSelectSession}
         onCreate={onCreateSession}

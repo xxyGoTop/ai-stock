@@ -6,6 +6,7 @@ type Props = {
   conversations: Conversation[]
   activeId: string
   collapsed?: boolean
+  summaryTopics?: Record<string, string>
   onToggleCollapse?: () => void
   onSelect: (id: string) => void
   onCreate: () => void
@@ -16,6 +17,7 @@ export default function SessionSidebar({
   conversations,
   activeId,
   collapsed,
+  summaryTopics,
   onToggleCollapse,
   onSelect,
   onCreate,
@@ -53,24 +55,28 @@ export default function SessionSidebar({
         {groups.map((g) => (
           <div key={g.label} className="session-group">
             <div className="session-day">{g.label}</div>
-            {g.items.map((c) => (
-              <div key={c.id} className={`session-item ${c.id === activeId ? 'active' : ''}`}>
-                <button type="button" className="session-main" onClick={() => onSelect(c.id)} title={c.title}>
-                  {c.title || '新会话'}
-                </button>
-                <button
-                  type="button"
-                  className="session-del"
-                  title="删除"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    if (window.confirm('删除这个会话？')) onDelete(c.id)
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
+            {g.items.map((c) => {
+              const topic = summaryTopics?.[c.id]
+              return (
+                <div key={c.id} className={`session-item ${c.id === activeId ? 'active' : ''}`}>
+                  <button type="button" className="session-main" onClick={() => onSelect(c.id)} title={topic || c.title}>
+                    <span className="session-title">{c.title || '新会话'}</span>
+                    {topic ? <span className="session-topic muted">{topic}</span> : null}
+                  </button>
+                  <button
+                    type="button"
+                    className="session-del"
+                    title="删除"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (window.confirm('删除这个会话？')) onDelete(c.id)
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              )
+            })}
           </div>
         ))}
         {conversations.length === 0 && <p className="muted pad">暂无会话</p>}

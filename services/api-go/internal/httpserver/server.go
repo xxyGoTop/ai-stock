@@ -14,6 +14,7 @@ import (
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/conversation"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/dailypicks"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/indicator"
+	"github.com/xxyGoTop/ai-stock/services/api-go/internal/memory"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/paper"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/provider"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/python"
@@ -28,6 +29,7 @@ type Server struct {
 	watch  *watchlist.Store
 	picks  *dailypicks.Store
 	conv   *conversation.Store
+	mem    *memory.Store
 	comp   *companion.Service
 	origin string
 }
@@ -41,6 +43,7 @@ func New(timeout time.Duration) *Server {
 	py := python.New()
 	watch := watchlist.New()
 	picks := dailypicks.New()
+	mem := memory.New()
 	return &Server{
 		bundle: bundle,
 		py:     py,
@@ -48,7 +51,8 @@ func New(timeout time.Duration) *Server {
 		watch:  watch,
 		picks:  picks,
 		conv:   conversation.New(),
-		comp:   companion.New(bundle, py, watch, picks),
+		mem:    mem,
+		comp:   companion.New(bundle, py, watch, picks, mem),
 		origin: origin,
 	}
 }
@@ -71,6 +75,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/llm/models", s.models)
 	mux.HandleFunc("/api/v1/analysis-profiles", s.profiles)
 	mux.HandleFunc("/api/v1/agents", s.agents)
+	mux.HandleFunc("/api/v1/ai/analyze/stream", s.analyzeStream)
 	mux.HandleFunc("/api/v1/ai/analyze", s.analyze)
 	mux.HandleFunc("/api/v1/ai/daily-note", s.dailyNote)
 	mux.HandleFunc("/api/v1/ai/companion/briefing", s.companionBriefing)
@@ -83,6 +88,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/paper/positions", s.paperPositions)
 	mux.HandleFunc("/api/v1/paper/reset", s.paperReset)
 	mux.HandleFunc("/api/v1/notifications", s.notifications)
+	mux.HandleFunc("/api/v1/memory", s.memorySnapshot)
+	mux.HandleFunc("/api/v1/memory/preferences", s.memoryPreferences)
+	mux.HandleFunc("/api/v1/memory/research", s.memoryResearch)
+	mux.HandleFunc("/api/v1/memory/summaries/", s.memorySummaryItem)
 	mux.HandleFunc("/api/v1/conversations/", s.conversationItem)
 	mux.HandleFunc("/api/v1/conversations", s.conversations)
 	mux.HandleFunc("/api/v1/research/events", s.researchEvents)
@@ -249,6 +258,7 @@ func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body, _ := io.ReadAll(r.Body)
+	body = s.enrichAnalyzeBody(body)
 	raw, err := s.py.Analyze(body)
 	if err != nil {
 		response.Error(w, http.StatusBadGateway, "python analyze: "+err.Error())
@@ -260,6 +270,81 @@ func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.OK(w, dest)
+}
+
+func (s *Server) analyzeStream(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		response.Error(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	body, _ := io.ReadAll(r.Body)
+	body = s.enrichAnalyzeBody(body)
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		response.Error(w, http.StatusInternalServerError, "stream unsupported")
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-ndjson; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache, no-transform")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+
+	raw, err := s.py.AnalyzeStream(body, func(step, title, status, summary string) {
+		ev := map[string]interface{}{
+			"event":  "progress",
+			"step":   step,
+			"title":  title,
+			"status": status,
+		}
+		if summary != "" && summary != "<nil>" {
+			ev["summary"] = summary
+		}
+		line, _ := json.Marshal(ev)
+		_, _ = w.Write(append(line, '\n'))
+		flusher.Flush()
+	})
+	if err != nil {
+		line, _ := json.Marshal(map[string]interface{}{"event": "error", "message": err.Error()})
+		_, _ = w.Write(append(line, '\n'))
+		flusher.Flush()
+		return
+	}
+	var data interface{}
+	_ = json.Unmarshal(raw, &data)
+	line, _ := json.Marshal(map[string]interface{}{"event": "result", "data": data})
+	_, _ = w.Write(append(line, '\n'))
+	flusher.Flush()
+}
+
+// enrichAnalyzeBody 注入 Go 侧更稳的行情，避免 Python 直连东财失败。
+func (s *Server) enrichAnalyzeBody(body []byte) []byte {
+	var m map[string]interface{}
+	if json.Unmarshal(body, &m) != nil || m == nil {
+		return body
+	}
+	symbol, _ := m["symbol"].(string)
+	symbol = strings.TrimSpace(symbol)
+	if symbol == "" {
+		return body
+	}
+	if q, err := s.bundle.Quote(symbol); err == nil && q != nil && q.Price > 0 {
+		if _, ok := m["quote"]; !ok {
+			m["quote"] = map[string]interface{}{
+				"symbol": q.Symbol, "name": q.Name, "market": string(q.Market),
+				"price": q.Price, "change": q.Change, "changePercent": q.ChangePercent,
+				"turnover": q.Turnover, "volumeRatio": q.VolumeRatio,
+				"volume": q.Volume, "amount": q.Amount,
+				"industry": q.Industry, "region": q.Region, "concepts": q.Concepts,
+				"mainNetInflow": q.MainNetInflow, "mainNetInflowPct": q.MainNetInflowPct,
+			}
+		}
+	}
+	out, err := json.Marshal(m)
+	if err != nil {
+		return body
+	}
+	return out
 }
 
 func (s *Server) dailyNote(w http.ResponseWriter, r *http.Request) {
@@ -440,6 +525,87 @@ func (s *Server) watchAnomalyRules(w http.ResponseWriter, r *http.Request) {
 		})
 	default:
 		response.Error(w, http.StatusMethodNotAllowed, "GET or PATCH")
+	}
+}
+
+func (s *Server) memorySnapshot(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		response.Error(w, http.StatusMethodNotAllowed, "GET only")
+		return
+	}
+	response.OK(w, s.mem.Get())
+}
+
+func (s *Server) memoryPreferences(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		snap := s.mem.Get()
+		response.OK(w, snap.Preferences)
+	case http.MethodPut, http.MethodPatch:
+		var body memory.Preferences
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			response.Error(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		snap, err := s.mem.SavePreferences(body)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		response.OK(w, snap)
+	default:
+		response.Error(w, http.StatusMethodNotAllowed, "GET or PATCH")
+	}
+}
+
+func (s *Server) memoryResearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		response.Error(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	var body struct {
+		Key   string `json:"key"`
+		Kind  string `json:"kind"`
+		Label string `json:"label"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	snap := s.mem.RecordResearch(body.Key, body.Kind, body.Label)
+	response.OK(w, snap)
+}
+
+func (s *Server) memorySummaryItem(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/memory/summaries/")
+	id = strings.Trim(id, "/")
+	if id == "" {
+		response.Error(w, http.StatusBadRequest, "conversationId required")
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		sum := s.mem.GetSummary(id)
+		if sum == nil {
+			response.OK(w, map[string]interface{}{"conversationId": id, "topic": "", "importantFacts": []string{}, "openQuestions": []string{}})
+			return
+		}
+		response.OK(w, sum)
+	case http.MethodPut, http.MethodPatch:
+		var body memory.ConversationSummary
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			response.Error(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		body.ConversationID = id
+		saved, err := s.mem.UpsertSummary(body)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		response.OK(w, saved)
+	default:
+		response.Error(w, http.StatusMethodNotAllowed, "GET or PUT")
 	}
 }
 
