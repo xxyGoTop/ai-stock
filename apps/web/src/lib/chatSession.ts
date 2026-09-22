@@ -1,4 +1,10 @@
 import type { CompanionBlock, CompanionBriefing, CompanionWorkspace } from '@ai-stock/types'
+import {
+  appendResearchEvents,
+  getConversationSnapshot,
+  putConversationSnapshot,
+} from '@ai-stock/api-client'
+import type { ResearchEvent } from '@ai-stock/types'
 
 export type ChatMsg = {
   id: string
@@ -73,6 +79,168 @@ function writeStore(store: Store) {
   mem.value = store
   try {
     sessionStorage.setItem(KEY, JSON.stringify(store))
+  } catch {
+    /* ignore */
+  }
+  scheduleServerSync(store)
+}
+
+let syncTimer: ReturnType<typeof setTimeout> | null = null
+let syncing = false
+let pendingSync: Store | null = null
+
+function scheduleServerSync(store: Store) {
+  pendingSync = store
+  if (syncTimer) clearTimeout(syncTimer)
+  syncTimer = setTimeout(() => {
+    void flushServerSync()
+  }, 800)
+}
+
+async function flushServerSync() {
+  const snap = pendingSync
+  pendingSync = null
+  if (!snap || syncing) {
+    if (snap) pendingSync = snap
+    return
+  }
+  syncing = true
+  try {
+    await putConversationSnapshot({
+      activeId: snap.activeId,
+      conversations: snap.conversations.map(toRemoteConversation),
+    })
+  } catch {
+    /* offline / server down — keep local */
+  } finally {
+    syncing = false
+    if (pendingSync) {
+      const again = pendingSync
+      pendingSync = null
+      scheduleServerSync(again)
+    }
+  }
+}
+
+function toRemoteConversation(c: Conversation) {
+  return {
+    id: c.id,
+    title: c.title,
+    messages: c.messages,
+    workspace: c.workspace,
+    briefing: c.briefing,
+    phaseLabel: c.phaseLabel,
+    bootstrapped: c.bootstrapped,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+  }
+}
+
+function fromRemoteConversation(raw: {
+  id: string
+  title?: string
+  messages?: ChatMsg[]
+  workspace?: CompanionWorkspace
+  briefing?: CompanionBriefing | null
+  phaseLabel?: string
+  bootstrapped?: boolean
+  createdAt?: number
+  updatedAt?: number
+}): Conversation {
+  return {
+    id: raw.id,
+    title: raw.title || '新会话',
+    messages: Array.isArray(raw.messages) ? raw.messages : [],
+    workspace: raw.workspace || { ...defaultWorkspace },
+    briefing: raw.briefing ?? null,
+    phaseLabel: raw.phaseLabel || '',
+    bootstrapped: !!raw.bootstrapped,
+    createdAt: raw.createdAt || Date.now(),
+    updatedAt: raw.updatedAt || Date.now(),
+  }
+}
+
+/** 启动时从服务端拉取；服务端有内容则覆盖本地，否则把本地推上去。 */
+export async function hydrateFromServer(): Promise<Store> {
+  const local = loadStore()
+  try {
+    const remote = await getConversationSnapshot()
+    const remoteList = (remote.conversations || []).map(fromRemoteConversation)
+    if (remoteList.length > 0) {
+      const activeId =
+        remote.activeId && remoteList.some((c) => c.id === remote.activeId)
+          ? remote.activeId
+          : remoteList[0].id
+      const store: Store = { activeId, conversations: remoteList }
+      mem.value = store
+      try {
+        sessionStorage.setItem(KEY, JSON.stringify(store))
+      } catch {
+        /* ignore */
+      }
+      return store
+    }
+    // 服务端空：把本地有内容的会话推上去
+    const meaningful = local.conversations.filter((c) => c.messages.length > 0 || c.bootstrapped)
+    if (meaningful.length > 0) {
+      await putConversationSnapshot({
+        activeId: local.activeId,
+        conversations: local.conversations.map(toRemoteConversation),
+      })
+    }
+  } catch {
+    /* keep local */
+  }
+  return local
+}
+
+export async function recordResearchRun(input: {
+  conversationId: string
+  intent?: string
+  progress?: ResearchStep[]
+  tools?: { tool: string; title: string; status: string; summary?: string }[]
+}) {
+  const events: ResearchEvent[] = []
+  const runId = `run-${Date.now()}`
+  if (input.intent) {
+    events.push({
+      conversationId: input.conversationId,
+      runId,
+      eventType: 'run.start',
+      summary: input.intent,
+      status: 'done',
+    })
+  }
+  ;(input.progress || []).forEach((s) => {
+    events.push({
+      conversationId: input.conversationId,
+      runId,
+      eventType: 'research.step',
+      summary: s.title,
+      status: s.status,
+      output: s,
+    })
+  })
+  ;(input.tools || []).forEach((t) => {
+    events.push({
+      conversationId: input.conversationId,
+      runId,
+      eventType: 'tool',
+      toolName: t.tool,
+      summary: t.summary || t.title,
+      status: t.status,
+      output: t,
+    })
+  })
+  if (!events.length) return
+  events.push({
+    conversationId: input.conversationId,
+    runId,
+    eventType: 'run.end',
+    status: 'done',
+  })
+  try {
+    await appendResearchEvents(events)
   } catch {
     /* ignore */
   }

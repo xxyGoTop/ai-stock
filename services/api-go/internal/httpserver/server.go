@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/companion"
+	"github.com/xxyGoTop/ai-stock/services/api-go/internal/conversation"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/dailypicks"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/indicator"
 	"github.com/xxyGoTop/ai-stock/services/api-go/internal/paper"
@@ -26,6 +27,7 @@ type Server struct {
 	paper  *paper.Store
 	watch  *watchlist.Store
 	picks  *dailypicks.Store
+	conv   *conversation.Store
 	comp   *companion.Service
 	origin string
 }
@@ -45,6 +47,7 @@ func New(timeout time.Duration) *Server {
 		paper:  paper.New(),
 		watch:  watch,
 		picks:  picks,
+		conv:   conversation.New(),
 		comp:   companion.New(bundle, py, watch, picks),
 		origin: origin,
 	}
@@ -80,6 +83,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/paper/positions", s.paperPositions)
 	mux.HandleFunc("/api/v1/paper/reset", s.paperReset)
 	mux.HandleFunc("/api/v1/notifications", s.notifications)
+	mux.HandleFunc("/api/v1/conversations/", s.conversationItem)
+	mux.HandleFunc("/api/v1/conversations", s.conversations)
+	mux.HandleFunc("/api/v1/research/events", s.researchEvents)
 	mux.HandleFunc("/api/v1/watchlist/anomaly-rules", s.watchAnomalyRules)
 	mux.HandleFunc("/api/v1/watchlist/anomalies", s.watchAnomalies)
 	mux.HandleFunc("/api/v1/watchlist/today-ops", s.watchTodayOps)
@@ -94,7 +100,7 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", s.origin)
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -461,6 +467,146 @@ func (s *Server) watchTodayOps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.OK(w, scan)
+}
+
+func (s *Server) conversations(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		snap := s.conv.GetSnapshot()
+		response.OK(w, snap)
+	case http.MethodPut:
+		var body conversation.Snapshot
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			response.Error(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		saved, err := s.conv.PutSnapshot(body)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		response.OK(w, saved)
+	case http.MethodPost:
+		var body conversation.Conversation
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			response.Error(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		saved, err := s.conv.Upsert(body)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		response.OK(w, saved)
+	default:
+		response.Error(w, http.StatusMethodNotAllowed, "GET, PUT or POST")
+	}
+}
+
+func (s *Server) conversationItem(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/v1/conversations/")
+	id = strings.TrimSpace(id)
+	if id == "" {
+		response.Error(w, http.StatusBadRequest, "id required")
+		return
+	}
+	if id == "active" {
+		if r.Method != http.MethodPatch {
+			response.Error(w, http.StatusMethodNotAllowed, "PATCH only")
+			return
+		}
+		var body struct {
+			ActiveID string `json:"activeId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			response.Error(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		snap, err := s.conv.SetActive(body.ActiveID)
+		if err != nil {
+			response.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		response.OK(w, snap)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		c, err := s.conv.Get(id)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if c == nil {
+			response.Error(w, http.StatusNotFound, "not found")
+			return
+		}
+		response.OK(w, c)
+	case http.MethodPut, http.MethodPatch:
+		var body conversation.Conversation
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			response.Error(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		body.ID = id
+		saved, err := s.conv.Upsert(body)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		response.OK(w, saved)
+	case http.MethodDelete:
+		snap, err := s.conv.Delete(id)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		response.OK(w, snap)
+	default:
+		response.Error(w, http.StatusMethodNotAllowed, "GET, PUT, PATCH or DELETE")
+	}
+}
+
+func (s *Server) researchEvents(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		cid := strings.TrimSpace(r.URL.Query().Get("conversationId"))
+		limit := 100
+		if v := r.URL.Query().Get("limit"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				limit = n
+			}
+		}
+		items := s.conv.ListEvents(cid, limit)
+		response.OK(w, map[string]interface{}{"items": items, "count": len(items)})
+	case http.MethodPost:
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			response.Error(w, http.StatusBadRequest, "invalid body")
+			return
+		}
+		var batch struct {
+			Events []conversation.ResearchEvent `json:"events"`
+		}
+		var single conversation.ResearchEvent
+		events := []conversation.ResearchEvent{}
+		if json.Unmarshal(raw, &batch) == nil && len(batch.Events) > 0 {
+			events = batch.Events
+		} else if json.Unmarshal(raw, &single) == nil && single.EventType != "" {
+			events = []conversation.ResearchEvent{single}
+		} else {
+			response.Error(w, http.StatusBadRequest, "events required")
+			return
+		}
+		saved, err := s.conv.AppendEvents(events)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		response.OK(w, map[string]interface{}{"items": saved, "count": len(saved)})
+	default:
+		response.Error(w, http.StatusMethodNotAllowed, "GET or POST")
+	}
 }
 
 func (s *Server) notifications(w http.ResponseWriter, r *http.Request) {

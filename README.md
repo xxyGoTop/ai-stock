@@ -83,6 +83,7 @@ Go API :18080
 | `services/api-go/internal/companion/stream.go` | Agent Run SSE 推送 |
 | `services/api-go/internal/companion/anomaly.go` | 自选异动规则与扫描 |
 | `services/api-go/internal/companion/briefing.go` / `chat.go` / `notify.go` | 简报、意图路由、Notification Agent |
+| `services/api-go/internal/conversation/` | 会话与 research_events 持久化 |
 | `services/api-go/internal/dailypicks/` | 每日推荐持久化 |
 | `services/api-go/internal/httpserver/server.go` | 路由注册 |
 
@@ -97,15 +98,16 @@ Go API :18080
 5. **自选异动 MVP**：`GET /api/v1/watchlist/anomalies`；意图 `watch_anomaly`；简报块 + 页内主动提醒
 6. **Vite SSE 代理**：`apps/web/vite.config.ts` 对 `text/event-stream` 关缓冲
 7. **Notification Agent**：Go 后台定时扫描自选异动与今日操作，指纹去重写入 `data/notifications.json`；对话拉 `GET /api/v1/notifications` 并 `PATCH` 已读
+8. **会话持久化**：`GET/PUT /api/v1/conversations` + `POST /api/v1/research/events`；本地 sessionStorage 作缓存，启动时与服务端同步
 
 建议下一步：
 
 - [x] 异动规则可配置（设置页阈值）
 - [x] Notification Agent 后台定时（不仅页内 poll）
-- [ ] 服务端会话 / research_events 持久化（现在是 sessionStorage）
+- [x] 服务端会话 / research_events 持久化（现在是 sessionStorage）
 - [ ] 更丰富 Workspace 块（对比、风险卡等，见 V2 文档 Phase 2–4）
 
-本地数据（不进 Git）：`services/api-go/data/watchlist.json`、`paper.json`、`anomaly_rules.json`、`notifications.json`、`daily-picks/`。换机后自选与模拟账户需重新加或自行拷贝。
+本地数据（不进 Git）：`services/api-go/data/watchlist.json`、`paper.json`、`anomaly_rules.json`、`notifications.json`、`conversations.json`、`daily-picks/`。换机后自选与模拟账户需重新加或自行拷贝。
 
 ## 五套选股算法
 

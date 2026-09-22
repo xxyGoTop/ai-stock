@@ -45,8 +45,10 @@ import WatchButton from '../components/WatchButton'
 import {
   createConversation,
   deleteConversation,
+  hydrateFromServer,
   listConversations,
   loadActiveConversation,
+  recordResearchRun,
   saveActiveConversation,
   switchConversation,
   uid,
@@ -301,8 +303,20 @@ export default function Chat() {
   }
 
   useEffect(() => {
-    void bootstrap()
+    let cancelled = false
+    ;(async () => {
+      const store = await hydrateFromServer()
+      if (cancelled) return
+      const active =
+        store.conversations.find((c) => c.id === store.activeId) || store.conversations[0]
+      persistRef.current = false
+      hydrate(active)
+      refreshList()
+      persistRef.current = true
+      void bootstrap()
+    })()
     return () => {
+      cancelled = true
       abortRef.current?.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -566,6 +580,12 @@ export default function Chat() {
         tools: liveToolsRef.current,
       })
       setAgentState('done')
+      void recordResearchRun({
+        conversationId: activeId,
+        intent: extra?.action || agentIntent || res.intent || '',
+        progress: liveProgressRef.current,
+        tools: liveToolsRef.current,
+      })
     } catch (err) {
       if (gen !== runGenRef.current) return
       if ((err as Error)?.name === 'AbortError') {

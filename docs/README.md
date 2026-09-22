@@ -11,5 +11,6 @@
 - 对话意图：行情、热点、选股、推荐、个股分析、自选、K 线、模拟、**自选异动**
 - 每日推荐归档 + 设置页翻看
 - 页内自选异动 / 今日操作主动提醒（服务端 Notification Agent 定时扫描 + 收件箱去重）
+- 会话与 research_events 服务端持久化（`data/conversations.json`；浏览器仍缓存 sessionStorage）
 
 换机续作与今晚改动清单见根 README「今晚改动摘要」一节。

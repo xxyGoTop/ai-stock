@@ -10,8 +10,11 @@ import type {
   CompanionBriefing,
   CompanionChatResponse,
   CompanionNotice,
+  ConversationRecord,
+  ConversationSnapshot,
   AgentStreamEvent,
   DailyPickRecord,
+  ResearchEvent,
   IndicatorResult,
   KlineBar,
   LlmModel,
@@ -149,6 +152,44 @@ export function getNotifications() {
 
 export function ackNotifications(ids: string[]) {
   return patch<{ acked: number }>('/notifications', { ids })
+}
+
+export function getConversationSnapshot() {
+  return get<ConversationSnapshot>('/conversations')
+}
+
+export function putConversationSnapshot(body: ConversationSnapshot) {
+  return put<ConversationSnapshot>('/conversations', body)
+}
+
+export function getConversation(id: string) {
+  return get<ConversationRecord>(`/conversations/${encodeURIComponent(id)}`)
+}
+
+export function upsertConversation(body: ConversationRecord) {
+  return post<ConversationRecord>('/conversations', body)
+}
+
+export function deleteConversationRemote(id: string) {
+  return del<ConversationSnapshot>(`/conversations/${encodeURIComponent(id)}`)
+}
+
+export function setActiveConversation(activeId: string) {
+  return patch<ConversationSnapshot>('/conversations/active', { activeId })
+}
+
+export function listResearchEvents(conversationId?: string, limit = 100) {
+  const q = new URLSearchParams()
+  if (conversationId) q.set('conversationId', conversationId)
+  if (limit) q.set('limit', String(limit))
+  const qs = q.toString()
+  return get<{ items: ResearchEvent[]; count: number }>(`/research/events${qs ? `?${qs}` : ''}`).then(
+    (r) => r.items || [],
+  )
+}
+
+export function appendResearchEvents(events: ResearchEvent[]) {
+  return post<{ items: ResearchEvent[]; count: number }>('/research/events', { events })
 }
 
 export function addWatchItem(body: {
@@ -309,6 +350,22 @@ async function del<T>(path: string): Promise<T> {
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+  const payload = (await res.json()) as ApiResponse<T>
+  if (payload.code !== 0) {
+    throw new Error(payload.message || 'request failed')
+  }
+  return payload.data
+}
+
+async function put<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })

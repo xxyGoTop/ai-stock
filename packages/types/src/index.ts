@@ -539,3 +539,43 @@ export interface DailyPickRecord {
   summary?: string
 }
 
+export interface ChatMessage {
+  id: string
+  role: 'assistant' | 'user' | string
+  text: string
+  blocks?: CompanionBlock[]
+  progress?: { id: string; title: string; status: string }[]
+  tools?: { id: string; tool: string; title: string; status: string; summary?: string }[]
+  proactive?: boolean
+}
+
+export interface ConversationRecord {
+  id: string
+  title: string
+  messages: ChatMessage[]
+  workspace?: CompanionWorkspace
+  briefing?: CompanionBriefing | null
+  phaseLabel?: string
+  bootstrapped?: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+export interface ConversationSnapshot {
+  activeId: string
+  conversations: ConversationRecord[]
+}
+
+export interface ResearchEvent {
+  id?: string
+  conversationId: string
+  runId?: string
+  eventType: string
+  toolName?: string
+  status?: string
+  summary?: string
+  input?: unknown
+  output?: unknown
+  createdAt?: number
+}
+
